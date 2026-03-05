@@ -1,0 +1,82 @@
+
+2026-03-05 09:10:29,282 - WARNING - Attempt 1 at connecting failed: TimeoutError: 
+2026-03-05 09:10:39,685 - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-1' coro=<LogilterBackend._init_client() running at /home/saidabbosxon/Documents/projects/auto reciver/backend.py:74> wait_for=<Future pending cb=[BaseSelectorEventLoop._sock_write_done(11, handle=<Handle BaseS...67.51', 443))>)(), Task.task_wakeup()]> cb=[_chain_future.<locals>._call_set_state() at /usr/lib/python3.12/asyncio/futures.py:394]>
+2026-03-05 09:39:39,422 - WARNING - Backend already starting or connected.
+2026-03-05 09:43:51,201 - WARNING - Attempt 1 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:43:52,204 - WARNING - Attempt 2 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:43:53,208 - WARNING - Attempt 3 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:43:54,210 - WARNING - Attempt 4 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:43:55,216 - WARNING - Attempt 5 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:43:56,218 - WARNING - Attempt 6 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:43:58,221 - WARNING - Attempt 1 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:43:59,229 - WARNING - Attempt 2 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:00,231 - WARNING - Attempt 3 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:01,237 - WARNING - Attempt 4 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:02,239 - WARNING - Attempt 5 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:03,247 - WARNING - Attempt 6 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:05,251 - WARNING - Attempt 1 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:06,256 - WARNING - Attempt 2 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:07,257 - WARNING - Attempt 3 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:08,259 - WARNING - Attempt 4 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:09,261 - WARNING - Attempt 5 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:10,263 - WARNING - Attempt 6 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:12,267 - WARNING - Attempt 1 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:13,270 - WARNING - Attempt 2 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:14,272 - WARNING - Attempt 3 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:15,274 - WARNING - Attempt 4 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:16,276 - WARNING - Attempt 5 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:17,279 - WARNING - Attempt 6 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:19,287 - WARNING - Attempt 1 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:20,295 - WARNING - Attempt 2 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:21,296 - WARNING - Attempt 3 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:22,298 - WARNING - Attempt 4 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:23,300 - WARNING - Attempt 5 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:24,308 - WARNING - Attempt 6 at connecting failed: OSError: [Errno 101] Network is unreachable
+2026-03-05 09:44:26,312 - ERROR - Automatic reconnection failed 5 time(s)
+2026-03-05 09:44:26,318 - ERROR - Future exception was never retrieved
+future: <Future finished exception=ConnectionError('Connection to Telegram failed 5 time(s)')>
+ConnectionError: Connection to Telegram failed 5 time(s)
+2026-03-05 09:44:26,329 - ERROR - Client initialization error: Connection to Telegram failed 5 time(s)
+Traceback (most recent call last):
+  File "/home/saidabbosxon/Documents/projects/auto reciver/backend.py", line 106, in handler
+    common = await self.client(GetCommonChatsRequest(user_id=sender, max_id=0, limit=100))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/client/users.py", line 30, in __call__
+    return await self._call(self._sender, request, ordered=ordered)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/client/users.py", line 44, in _call
+    await r.resolve(self, utils)
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/tl/functions/messages.py", line 2324, in resolve
+    self.user_id = utils.get_input_user(await client.get_input_entity(self.user_id))
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/client/users.py", line 475, in get_input_entity
+    raise ValueError(
+ValueError: Could not find the input entity for PeerUser(user_id=8577182728) (PeerUser). Please read https://docs.telethon.dev/en/stable/concepts/entities.html to find out more details.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/saidabbosxon/Documents/projects/auto reciver/backend.py", line 148, in _init_client
+    await self.client.run_until_disconnected()
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/client/updates.py", line 490, in _keepalive_loop
+    await asyncio.wait_for(
+  File "/usr/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/client/updates.py", line 354, in _update_loop
+    diff = await self(get_diff)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/client/users.py", line 30, in __call__
+    return await self._call(self._sender, request, ordered=ordered)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/saidabbosxon/Documents/projects/auto reciver/env/lib/python3.12/site-packages/telethon/client/users.py", line 92, in _call
+    result = await future
+             ^^^^^^^^^^^^
+ConnectionError: Connection to Telegram failed 5 time(s)
+2026-03-05 11:14:09,085 - ERROR - Failed to forward lead: Cannot find any entity corresponding to "1070047329"
+2026-03-05 11:59:42,673 - WARNING - Attempt 1 at connecting failed: TimeoutError: 
+2026-03-05 11:59:53,685 - WARNING - Attempt 2 at connecting failed: TimeoutError: 
+2026-03-05 12:00:04,696 - WARNING - Attempt 3 at connecting failed: TimeoutError: 
+2026-03-05 12:00:15,712 - WARNING - Attempt 4 at connecting failed: TimeoutError: 
+2026-03-05 12:00:26,723 - WARNING - Attempt 5 at connecting failed: TimeoutError: 

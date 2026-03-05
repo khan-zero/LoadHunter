@@ -1,0 +1,92 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            build_cmd: pyinstaller --noconfirm --onefile --windowed --name "LoadHunter" main.py
+          - os: ubuntu-latest
+            build_cmd: pyinstaller --noconfirm --onefile --windowed --name "loadhunter" main.py
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Linux Desktop Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk xclip xsel
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller telethon customtkinter python-dotenv requests
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        shell: bash
+
+      - name: Build Application with PyInstaller
+        run: ${{ matrix.build_cmd }}
+
+      - name: Create DEB package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # Extract the version without the 'v'
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p package/usr/local/bin
+          mkdir -p package/DEBIAN
+          cp dist/loadhunter package/usr/local/bin/
+          chmod +x package/usr/local/bin/loadhunter
+          
+          # Create the Debian control file
+          cat <<EOF > package/DEBIAN/control
+          Package: loadhunter
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: LoadHunter Developer <noreply@github.com>
+          Description: LoadHunter - Modular Logistics Filter and Forwarder for Telegram.
+          EOF
+          
+          # Build the package
+          dpkg-deb --build package loadhunter_${VERSION}_amd64.deb
+
+      - name: Prepare Windows Executable
+        if: runner.os == 'Windows'
+        run: mv dist/LoadHunter.exe LoadHunter-Windows-x64.exe
+        shell: bash
+
+      - name: Upload Linux DEB to Release
+        if: runner.os == 'Linux'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: loadhunter_*_amd64.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows EXE to Release
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LoadHunter-Windows-x64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
