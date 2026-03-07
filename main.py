@@ -5,9 +5,19 @@ import threading
 import json
 import logging
 
-# Ensure local imports work in frozen state
-from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials
+# --- CRITICAL WINDOWS FIX: Ensure local modules are found in frozen state ---
+def get_base_dir():
+    if getattr(sys, 'frozen', False):
+        # If running as PyInstaller bundle
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
+BASE_DIR = get_base_dir()
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+# ---------------------------------------------------------------------------
+
+from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from filter_engine import FilterEngine
