@@ -4,18 +4,26 @@ import json
 from datetime import datetime
 from dotenv import load_dotenv
 
-def get_base_dir():
+def get_paths():
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(os.path.abspath(sys.executable))
-    return os.path.dirname(os.path.abspath(__file__))
+        # Folder where the .exe is
+        app_dir = os.path.dirname(os.path.abspath(sys.executable))
+        # Folder where pyinstaller extracted contents
+        bundle_dir = getattr(sys, '_MEIPASS', app_dir)
+        return app_dir, bundle_dir
+    
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    return curr_dir, curr_dir
 
-BASE_DIR = get_base_dir()
-DATA_DIR = os.path.join(BASE_DIR, 'data')
+APP_DIR, BUNDLE_DIR = get_paths()
+
+# All data (logs, filters, sessions) should live next to the .exe for persistence
+DATA_DIR = os.path.join(APP_DIR, 'data')
 SESSION_DIR = os.path.join(DATA_DIR, 'sessions')
 FILTERS_CONFIG_FILE = os.path.join(DATA_DIR, 'filters.json')
 SUCCESSFUL_LEADS_FILE = os.path.join(DATA_DIR, 'successful_leads.txt')
 CREDENTIALS_FILE = os.path.join(DATA_DIR, 'credentials.json')
-ENV_FILE = os.path.join(BASE_DIR, '.env')
+ENV_FILE = os.path.join(APP_DIR, '.env')
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(SESSION_DIR, exist_ok=True)

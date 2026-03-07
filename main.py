@@ -8,8 +8,8 @@ import logging
 # --- CRITICAL WINDOWS FIX: Ensure local modules are found in frozen state ---
 def get_base_dir():
     if getattr(sys, 'frozen', False):
-        # If running as PyInstaller bundle
-        return os.path.dirname(sys.executable)
+        # PyInstaller extracts to a temp folder and stores path in _MEIPASS
+        return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
     return os.path.dirname(os.path.abspath(__file__))
 
 BASE_DIR = get_base_dir()
