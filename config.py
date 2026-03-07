@@ -10,6 +10,8 @@ def get_base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 BASE_DIR = get_base_dir()
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 SESSION_DIR = os.path.join(DATA_DIR, 'sessions')
 FILTERS_CONFIG_FILE = os.path.join(DATA_DIR, 'filters.json')

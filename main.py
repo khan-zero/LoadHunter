@@ -1,11 +1,15 @@
 import os
+import sys
 import asyncio
 import threading
 import json
 import logging
+
+# Ensure local imports work in frozen state
+from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials
+
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
-from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials
 from filter_engine import FilterEngine
 from ui_components import LeadFrame, SettingsWindow, ErrorLogWindow, FloatingToast, SetupAPIWindow
 from backend import LoadHunterBackend

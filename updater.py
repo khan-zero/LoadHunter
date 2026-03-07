@@ -1,3 +1,4 @@
+from packaging import version
 import requests
 import json
 import webbrowser
@@ -8,7 +9,7 @@ import sys
 
 # Change this to your actual current version
 CURRENT_VERSION = "v1.0.0"
-GITHUB_REPO = "khan-zero/LoadHunter" # Up to date repository name
+GITHUB_REPO = "khan-zero/LoadHunter" 
 
 def get_latest_release():
     """Fetches the latest release from a GitHub repository."""
@@ -24,7 +25,7 @@ def check_for_updates(parent_window=None):
     """Checks if a newer version is available and prompts the user."""
     if not GITHUB_REPO or "your_username" in GITHUB_REPO.lower():
         if parent_window:
-            messagebox.showinfo("Updater", "Please set your GitHub Repository in updater.py first (e.g., username/repo_name).", parent=parent_window)
+            messagebox.showinfo("Updater", "Please set your GitHub Repository in updater.py first.", parent=parent_window)
         return False
         
     release = get_latest_release()
@@ -34,19 +35,26 @@ def check_for_updates(parent_window=None):
             messagebox.showerror("Update Check Failed", f"Could not check for updates:\n{release['error']}", parent=parent_window)
         return False
 
-    latest_version = release.get("tag_name", CURRENT_VERSION)
+    latest_tag = release.get("tag_name", CURRENT_VERSION)
     
-    # Simple version check (assumes semantic versioning like v1.0.0)
-    if latest_version != CURRENT_VERSION and latest_version > CURRENT_VERSION:
-        msg = f"A new version ({latest_version}) is available!\nYou are currently running {CURRENT_VERSION}.\n\nWould you like to download it now?"
-        if messagebox.askyesno("Update Available", msg, parent=parent_window):
-            # Open the release page in the browser where they can download the .exe or .deb
-            release_url = release.get("html_url", f"https://github.com/{GITHUB_REPO}/releases/latest")
-            webbrowser.open(release_url)
-            return True
-    else:
+    try:
+        # Strip 'v' prefix for comparison if present
+        v_latest = version.parse(latest_tag.lstrip('v'))
+        v_current = version.parse(CURRENT_VERSION.lstrip('v'))
+        
+        if v_latest > v_current:
+            msg = f"A new version ({latest_tag}) is available!\nYou are currently running {CURRENT_VERSION}.\n\nWould you like to download it now?"
+            if messagebox.askyesno("Update Available", msg, parent=parent_window):
+                release_url = release.get("html_url", f"https://github.com/{GITHUB_REPO}/releases/latest")
+                webbrowser.open(release_url)
+                return True
+        else:
+            if parent_window:
+                messagebox.showinfo("Up to Date", f"You are running the latest version ({CURRENT_VERSION}).", parent=parent_window)
+    except Exception as e:
+        logging.error(f"Version comparison error: {e}")
         if parent_window:
-            messagebox.showinfo("Up to Date", f"You are running the latest version ({CURRENT_VERSION}).", parent=parent_window)
+            messagebox.showinfo("Updater", f"Current version: {CURRENT_VERSION}", parent=parent_window)
             
     return False
 
