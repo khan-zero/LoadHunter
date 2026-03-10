@@ -17,9 +17,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            build_cmd: pyinstaller --noconfirm --onefile --windowed --paths . --hidden-import config --hidden-import filter_engine --hidden-import ui_components --hidden-import backend --hidden-import updater --name "LoadHunter" main.py
+            build_cmd: pyinstaller --noconfirm main.spec
           - os: ubuntu-latest
-            build_cmd: pyinstaller --noconfirm --onefile --windowed --paths . --hidden-import config --hidden-import filter_engine --hidden-import ui_components --hidden-import backend --hidden-import updater --name "loadhunter" main.py
+            build_cmd: pyinstaller --noconfirm main.spec
 
     steps:
       - name: Checkout Code
@@ -39,8 +39,7 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller telethon customtkinter python-dotenv requests
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -r requirements.txt
         shell: bash
 
       - name: Build Application with PyInstaller
@@ -53,7 +52,7 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           mkdir -p package/usr/local/bin
           mkdir -p package/DEBIAN
-          cp dist/loadhunter package/usr/local/bin/
+          cp dist/LoadHunter package/usr/local/bin/loadhunter
           chmod +x package/usr/local/bin/loadhunter
           
           # Create the Debian control file
@@ -64,6 +63,7 @@ jobs:
           Priority: optional
           Architecture: amd64
           Maintainer: LoadHunter Developer <noreply@github.com>
+          Depends: python3-tk, xclip, xsel
           Description: LoadHunter - Modular Logistics Filter and Forwarder for Telegram.
           EOF
           

@@ -46,6 +46,7 @@ SESSION_DIR = os.path.join(DATA_DIR, 'sessions')
 FILTERS_CONFIG_FILE = os.path.join(DATA_DIR, 'filters.json')
 SUCCESSFUL_LEADS_FILE = os.path.join(DATA_DIR, 'successful_leads.txt')
 CREDENTIALS_FILE = os.path.join(DATA_DIR, 'credentials.json')
+LOG_FILE = os.path.join(DATA_DIR, 'loadhunter.log')
 ENV_FILE = os.path.join(APP_DIR, '.env')
 
 os.makedirs(DATA_DIR, exist_ok=True)

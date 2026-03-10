@@ -10,7 +10,7 @@ import logging
 # No manual sys.path manipulation is needed.
 # ---------------------------------------------------------------------------
 
-from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials
+from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials, LOG_FILE
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from filter_engine import FilterEngine
@@ -215,11 +215,11 @@ class LoadHunterApp(ctk.CTk):
         should_save = self.app_config.get("save_critical_logs", True)
         if should_save and not self._file_handler:
             try:
-                self._file_handler = logging.FileHandler("loadhunter.log", encoding='utf-8')
+                self._file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
                 self._file_handler.setLevel(logging.WARNING)
                 self._file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
                 root_logger.addHandler(self._file_handler)
-                logging.info("File logging enabled (Warnings/Errors only).")
+                logging.info(f"File logging enabled: {LOG_FILE}")
             except Exception as e:
                 print(f"Failed to setup file logging: {e}")
         elif not should_save and self._file_handler:
@@ -253,7 +253,7 @@ class LoadHunterApp(ctk.CTk):
             pass
 
     def open_logs(self):
-        ErrorLogWindow(self, "loadhunter.log")
+        ErrorLogWindow(self, LOG_FILE)
 
     def show_toast(self, message, level="info"):
         FloatingToast(self, message, level)

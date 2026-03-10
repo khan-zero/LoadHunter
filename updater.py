@@ -6,6 +6,7 @@ from tkinter import messagebox
 import platform
 import os
 import sys
+import logging
 
 # Change this to your actual current version
 CURRENT_VERSION = "v1.0.0"
