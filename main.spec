@@ -4,7 +4,7 @@ import customtkinter
 
 block_cipher = None
 
-# Find customtkinter path
+# Find customtkinter package path
 ctk_path = os.path.dirname(customtkinter.__file__)
 
 a = Analysis(
@@ -13,8 +13,13 @@ a = Analysis(
     binaries=[],
     datas=[
         (os.path.join(ctk_path, "assets"), "customtkinter/assets"),
+        (os.path.join(ctk_path, "themes"), "customtkinter/themes"),
     ],
-    hiddenimports=['config', 'filter_engine', 'ui_components', 'backend', 'updater', 'darkdetect', 'telethon'],
+    hiddenimports=[
+        'config', 'filter_engine', 'ui_components', 'backend', 
+        'updater', 'darkdetect', 'telethon', 'PIL', 'PIL._imagingtk', 
+        'PIL.ImageTk', 'PIL.Image', 'tkinter', 'tkinter.filedialog', 'tkinter.messagebox'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
