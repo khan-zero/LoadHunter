@@ -5,23 +5,16 @@ import threading
 import json
 import logging
 
-# --- CRITICAL WINDOWS FIX: Ensure local modules are found in frozen state ---
-def get_base_dir():
-    if getattr(sys, 'frozen', False):
-        # PyInstaller extracts to a temp folder and stores path in _MEIPASS
-        return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-    return os.path.dirname(os.path.abspath(__file__))
-
-BASE_DIR = get_base_dir()
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+# --- PyInstaller Paths ---
+# Imports are resolved by PyInstaller's FrozenImporter.
+# No manual sys.path manipulation is needed.
 # ---------------------------------------------------------------------------
 
 from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from filter_engine import FilterEngine
-from ui_components import LeadFrame, SettingsWindow, ErrorLogWindow, FloatingToast, SetupAPIWindow
+from ui_components import LeadFrame, SettingsWindow, ErrorLogWindow, FloatingToast, SetupAPIWindow, LoginWindow
 from backend import LoadHunterBackend
 
 # Configure initial logging
@@ -66,26 +59,86 @@ class LoadHunterApp(ctk.CTk):
             loop=self.loop,
             on_lead_callback=self.on_lead_received,
             on_groups_callback=self.update_groups_ui,
-            on_error_callback=self.handle_backend_error
+            on_error_callback=self.handle_backend_error,
+            on_ready_callback=self.on_backend_ready
         )
         
         self.setup_ui()
-        self.update_logging_handlers() # Apply logging settings
+        self.update_logging_handlers()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Check API Keys
-        self.after(200, self.check_api_keys)
+        # Hide main window initially for the Splash Screen
+        self.withdraw()
+        self.after(100, self.show_splash_screen)
+
+    def show_splash_screen(self):
+        self.splash = ctk.CTkToplevel(self)
+        self.splash.title("Loading LoadHunter...")
+        self.splash.geometry("400x250")
+        self.splash.configure(fg_color=COLORS["bg_primary"])
+        self.splash.overrideredirect(True) # Remove windows borders for a cleaner splash
+        
+        self.splash.update_idletasks()
+        pw = self.winfo_screenwidth() // 2
+        ph = self.winfo_screenheight() // 2
+        w, h = 400, 250
+        self.splash.geometry(f"{w}x{h}+{pw - w // 2}+{ph - h // 2}")
+
+        self.splash.grid_rowconfigure(0, weight=1)
+        self.splash.grid_columnconfigure(0, weight=1)
+        
+        frame = ctk.CTkFrame(self.splash, fg_color="transparent")
+        frame.grid(row=0, column=0)
+        
+        ctk.CTkLabel(
+            frame, text="LoadHunter", 
+            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color=COLORS["text_primary"]
+        ).pack(pady=(0, 5))
+        
+        self.splash_status = ctk.CTkLabel(
+            frame, text="Checking API credentials...",
+            font=ctk.CTkFont(size=12), text_color=COLORS["text_muted"]
+        )
+        self.splash_status.pack(pady=(0, 15))
+        
+        self.splash_progress = ctk.CTkProgressBar(frame, width=250, progress_color=COLORS["accent"])
+        self.splash_progress.pack()
+        self.splash_progress.set(0)
+        self.splash_progress.start()
+        
+        self.after(500, self.check_api_keys)
 
     def check_api_keys(self):
         from config import API_ID, API_HASH
         if not API_ID or not API_HASH:
-            self.start_btn.configure(state="disabled")
-            SetupAPIWindow(self, self.on_api_keys_saved)
+            self.splash_progress.stop()
+            self.splash_status.configure(text="Waiting for API Keys...")
+            # We must set SetupAPIWindow's parent to the splash so it displays above it
+            SetupAPIWindow(self.splash, self.on_api_keys_saved)
+        else:
+            self.splash_status.configure(text="Connecting to Telegram...")
+            self.backend.start(self.filter_engine)
             
     def on_api_keys_saved(self, api_id, api_hash):
         save_credentials(api_id, api_hash)
-        self.start_btn.configure(state="normal")
-        self.show_toast("API Credentials saved!", "success")
+        self.splash_progress.start()
+        self.splash_status.configure(text="Connecting to Telegram...")
+        self.backend.start(self.filter_engine)
+
+    def on_backend_ready(self):
+        """Called by backend when Telegram is fully connected and authorized."""
+        self.after(0, self._finalize_startup)
+        
+    def _finalize_startup(self):
+        if hasattr(self, 'splash') and self.splash.winfo_exists():
+            self.splash.destroy()
+        
+        self.deiconify() # Show the main UI
+        
+        # Start listening automatically
+        if not self.backend.listening:
+            self.toggle_listening()
 
     def setup_ui(self):
         self.grid_columnconfigure(0, weight=3)
@@ -264,16 +317,46 @@ class LoadHunterApp(ctk.CTk):
         self.groups_box.configure(state="disabled")
 
     def handle_backend_error(self, error_code):
+        if hasattr(self, 'splash') and self.splash.winfo_exists():
+            self.splash.destroy() # Ensure splash is gone if we hit an error
+
         if error_code == "AUTH_REQUIRED":
+            self.withdraw() # Ensure main window stays hidden during login
             self.after(0, self.request_login)
-            self.update_status_indicator("Auth Required", COLORS["danger"])
         else:
+            self.deiconify() # Force UI to show so the user sees the error
             logging.error(f"Backend Error: {error_code}")
             self.after(0, lambda: self.show_toast(f"Error: {error_code}", "error"))
             self.update_status_indicator("Error", COLORS["danger"])
 
     def open_settings(self):
-        SettingsWindow(self, self.app_config, on_save=self.update_config, on_import=self.import_config)
+        SettingsWindow(self, self.app_config, on_save=self.update_config, on_import=self.import_config, on_logout=self.logout_app)
+
+    def logout_app(self):
+        if not messagebox.askyesno("Log Out", "Are you sure you want to log out from Telegram? This will delete your local session."):
+            return
+            
+        async def do_logout():
+            try:
+                success = await self.backend.logout()
+                if success:
+                    self.after(0, lambda: messagebox.showinfo("Logged Out", "Successfully logged out from Telegram."))
+                    # Reset the backend client to force re-auth
+                    self.backend.client = None
+                    self.after(0, lambda: self.update_status_indicator("Logged Out", COLORS["text_muted"]))
+                    self.after(0, lambda: self.start_btn.configure(text="▶ Start Listening", fg_color=COLORS["success"]))
+                    self.backend.listening = False
+                else:
+                    self.after(0, lambda: messagebox.showerror("Error", "Failed to log out cleanly."))
+            except Exception as e:
+                logging.error(f"Logout Error: {e}")
+
+        asyncio.run_coroutine_threadsafe(do_logout(), self.loop)
+
+    def on_backend_ready(self):
+        self.deiconify() # Show main window
+        self.show_toast("Telegram Connected!", "success")
+        self.update_status_indicator("Ready", COLORS["text_muted"])
 
     def update_config(self, new_config):
         self.app_config = new_config
@@ -296,44 +379,7 @@ class LoadHunterApp(ctk.CTk):
                 messagebox.showerror("Error", f"Failed to import config: {e}")
 
     def request_login(self):
-        win = ctk.CTkToplevel(self)
-        win.title("Telegram Login")
-        win.geometry("300x350")
-        win.attributes("-topmost", True)
-        
-        ctk.CTkLabel(win, text="Phone Number (+998...)").pack(pady=5)
-        phone_entry = ctk.CTkEntry(win)
-        phone_entry.pack(pady=5)
-        
-        code_entry = ctk.CTkEntry(win, placeholder_text="Enter Code")
-        
-        def send_code():
-            phone = phone_entry.get().strip()
-            if not phone: return
-            
-            # Ensure backend is initialized
-            if not self.backend.client:
-                from telethon import TelegramClient
-                from config import SESSION_DIR
-                session_path = os.path.join(SESSION_DIR, 'loadhunter_session')
-                self.backend.client = TelegramClient(session_path, int(API_ID), API_HASH)
-            
-            if not self.backend.client.is_connected():
-                asyncio.run_coroutine_threadsafe(self.backend.client.connect(), self.loop)
-
-            asyncio.run_coroutine_threadsafe(self.backend.client.send_code_request(phone), self.loop)
-            phone_entry.configure(state="disabled")
-            code_entry.pack(pady=10)
-            ctk.CTkButton(win, text="Sign In", command=lambda: sign_in(phone)).pack(pady=5)
-            
-        def sign_in(phone):
-            code = code_entry.get().strip()
-            if not code or not self.backend.client: return
-            asyncio.run_coroutine_threadsafe(self.backend.client.sign_in(phone, code), self.loop)
-            win.destroy()
-            self.toggle_listening()
-            
-        ctk.CTkButton(win, text="Send Verification Code", command=send_code).pack(pady=10)
+        LoginWindow(self, self.backend, on_success=self.on_backend_ready)
 
     def on_closing(self):
         if not messagebox.askokcancel("Quit", "Do you want to quit?"):

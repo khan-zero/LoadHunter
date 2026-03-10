@@ -1,0 +1,22 @@
+{
+    "fem_endings_regex": ".*(ova|eva|ова|ева|а|я|ия|iya|ia|xon|хон|bibi|биби)$",
+    "blacklist_keywords": [
+        "logist",
+        "dispatcher",
+        "логист",
+        "диспетчер",
+        "@lorry_filter_bot"
+    ],
+    "bot_service_keywords": [
+        "Guruhda yozish uchun",
+        "qo'shishingiz kerak",
+        "robot"
+    ],
+    "max_line_breaks": 5,
+    "max_common_groups": 2,
+    "min_uz_char_percentage": 0.3,
+    "show_terminal_logs": true,
+    "forward_destinations": [
+        "me"
+    ]
+}

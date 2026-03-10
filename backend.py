@@ -7,11 +7,12 @@ from telethon.tl.functions.messages import GetCommonChatsRequest
 from config import API_ID, API_HASH, SESSION_DIR
 
 class LoadHunterBackend:
-    def __init__(self, loop, on_lead_callback, on_groups_callback, on_error_callback):
+    def __init__(self, loop, on_lead_callback, on_groups_callback, on_error_callback, on_ready_callback=None):
         self.loop = loop
         self.on_lead = on_lead_callback
         self.on_groups = on_groups_callback
         self.on_error = on_error_callback
+        self.on_ready = on_ready_callback
         
         self.client = None
         self.listening = False
@@ -68,10 +69,13 @@ class LoadHunterBackend:
 
     async def _init_client(self):
         session_path = os.path.join(SESSION_DIR, 'loadhunter_session')
-        self.client = TelegramClient(session_path, int(API_ID), API_HASH)
+        # Use a more robust connection policy
+        self.client = TelegramClient(session_path, int(API_ID), API_HASH, connection_retries=10, retry_delay=2)
         
         try:
+            logging.info("Connecting to Telegram...")
             await self.client.connect()
+            
             if not await self.client.is_user_authorized():
                 self._starting = False
                 self.on_error("AUTH_REQUIRED")
@@ -80,10 +84,13 @@ class LoadHunterBackend:
             self._starting = False
             logging.info("Telegram client connected and authorized.")
 
-            # Initial groups fetch
-            dialogs = await self.client.get_dialogs()
+            # Initial groups fetch - help Telethon 'see' entities
+            dialogs = await self.client.get_dialogs(limit=100)
             group_names = [d.name for d in dialogs if d.is_group or d.is_channel]
             self.on_groups(group_names)
+
+            if self.on_ready:
+                self.on_ready()
 
             @self.client.on(events.NewMessage)
             async def handler(event):
@@ -94,29 +101,24 @@ class LoadHunterBackend:
                     return
                 
                 try:
-                    sender = await event.get_sender()
-                    if not sender: return
+                    # Get sender with robust entity fetching
+                    try:
+                        sender = await event.get_sender()
+                        if not sender:
+                            sender = await self.client.get_entity(event.sender_id)
+                    except Exception:
+                        return # Skip if we can't resolve sender
                     
                     # Check cache first for common groups
                     if sender.id in self.common_chats_cache:
                         common_count = self.common_chats_cache[sender.id]
                     else:
                         try:
-                            # Pass the sender entity to GetCommonChatsRequest
+                            # Robustly call GetCommonChatsRequest
                             common = await self.client(GetCommonChatsRequest(user_id=sender, max_id=0, limit=100))
                             common_count = len(common.chats)
                             self.common_chats_cache[sender.id] = common_count
-                        except (ValueError, errors.RPCError):
-                            # Try fetching entity again to resolve Peer issues
-                            try:
-                                sender = await self.client.get_entity(sender.id)
-                                common = await self.client(GetCommonChatsRequest(user_id=sender, max_id=0, limit=100))
-                                common_count = len(common.chats)
-                                self.common_chats_cache[sender.id] = common_count
-                            except Exception:
-                                common_count = 0
-                        except Exception as e:
-                            logging.debug(f"Failed to get common chats for {sender.id}: {e}")
+                        except Exception:
                             common_count = 0
                     
                     reason = self.filter_engine.is_spam(event.text, sender, common_count, media=event.media)
@@ -160,10 +162,32 @@ class LoadHunterBackend:
         self.listening = False
         if self.client:
             try:
-                await asyncio.wait_for(self.client.disconnect(), timeout=5)
+                if self.client.is_connected():
+                    await asyncio.wait_for(self.client.disconnect(), timeout=5)
                 logging.info("Telegram client disconnected.")
             except Exception as e:
                 logging.error(f"Error during Telethon disconnect: {e}")
+
+    async def logout(self):
+        """Signs out of Telegram and deletes the session file."""
+        self.listening = False
+        if self.client:
+            try:
+                if not self.client.is_connected():
+                    await self.client.connect()
+                await self.client.log_out()
+                logging.info("Logged out from Telegram.")
+                
+                # Delete session file
+                session_path = os.path.join(SESSION_DIR, 'loadhunter_session.session')
+                if os.path.exists(session_path):
+                    os.remove(session_path)
+                    logging.info(f"Session file deleted: {session_path}")
+                return True
+            except Exception as e:
+                logging.error(f"Error during logout: {e}")
+                return False
+        return False
 
     async def forward_lead(self, chat_id, message_id, destinations):
         """Forwards a specific message to multiple destinations. Falls back to sending text if protected."""

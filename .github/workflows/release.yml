@@ -17,9 +17,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            build_cmd: pyinstaller --noconfirm --onefile --windowed --hidden-import config --hidden-import filter_engine --hidden-import ui_components --hidden-import backend --hidden-import updater --name "LoadHunter" main.py
+            build_cmd: pyinstaller --noconfirm --onefile --windowed --paths . --hidden-import config --hidden-import filter_engine --hidden-import ui_components --hidden-import backend --hidden-import updater --name "LoadHunter" main.py
           - os: ubuntu-latest
-            build_cmd: pyinstaller --noconfirm --onefile --windowed --hidden-import config --hidden-import filter_engine --hidden-import ui_components --hidden-import backend --hidden-import updater --name "loadhunter" main.py
+            build_cmd: pyinstaller --noconfirm --onefile --windowed --paths . --hidden-import config --hidden-import filter_engine --hidden-import ui_components --hidden-import backend --hidden-import updater --name "loadhunter" main.py
 
     steps:
       - name: Checkout Code

@@ -4,21 +4,44 @@ import json
 from datetime import datetime
 from dotenv import load_dotenv
 
-def get_paths():
-    if getattr(sys, 'frozen', False):
-        # Folder where the .exe is
-        app_dir = os.path.dirname(os.path.abspath(sys.executable))
-        # Folder where pyinstaller extracted contents
-        bundle_dir = getattr(sys, '_MEIPASS', app_dir)
-        return app_dir, bundle_dir
+import platform
+from pathlib import Path
+
+def get_data_dir() -> str:
+    """Returns an OS-specific, safe directory for application data."""
+    system = platform.system()
+    app_name = "LoadHunter"
     
-    curr_dir = os.path.dirname(os.path.abspath(__file__))
-    return curr_dir, curr_dir
+    if system == "Windows":
+        # Windows: %APPDATA%\LoadHunter
+        base_dir = os.environ.get("APPDATA")
+        if not base_dir:
+            base_dir = os.path.expanduser("~")
+        data_dir = os.path.join(base_dir, app_name)
+    elif system == "Darwin":
+        # Mac: ~/Library/Application Support/LoadHunter
+        data_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support", app_name)
+    else:
+        # Linux/Unix: ~/.local/share/LoadHunter
+        base_dir = os.environ.get("XDG_DATA_HOME")
+        if not base_dir:
+            base_dir = os.path.join(os.path.expanduser("~"), ".local", "share")
+        data_dir = os.path.join(base_dir, app_name)
+        
+    return data_dir
 
-APP_DIR, BUNDLE_DIR = get_paths()
+def get_bundle_dir() -> str:
+    """Returns the directory of the executable or script."""
+    if getattr(sys, 'frozen', False):
+        return getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
 
-# All data (logs, filters, sessions) should live next to the .exe for persistence
-DATA_DIR = os.path.join(APP_DIR, 'data')
+# Data will be stored in the OS-specific user app data folder
+DATA_DIR = get_data_dir()
+BUNDLE_DIR = get_bundle_dir()
+APP_DIR = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else BUNDLE_DIR
+
+# All data (logs, filters, sessions) should live in the OS-specific data dir for persistence
 SESSION_DIR = os.path.join(DATA_DIR, 'sessions')
 FILTERS_CONFIG_FILE = os.path.join(DATA_DIR, 'filters.json')
 SUCCESSFUL_LEADS_FILE = os.path.join(DATA_DIR, 'successful_leads.txt')
@@ -50,19 +73,19 @@ def save_credentials(api_id, api_hash):
         json.dump({'TG_API_ID': API_ID, 'TG_API_HASH': API_HASH}, f)
 
 COLORS = {
-    "bg_primary":     "#0f1117",
-    "bg_secondary":   "#161b27",
-    "bg_card":        "#1c2333",
-    "accent":         "#3b82f6",
-    "success":        "#22c55e",
-    "danger":         "#ef4444",
-    "text_primary":   "#e2e8f0",
-    "text_muted":     "#475569",
-    "border":         "#2d3748",
-    "accent_hover":   "#2563eb",
-    "success_hover":  "#16a34a",
-    "danger_hover":   "#dc2626",
-    "warning":        "#f59e0b",
+    "bg_primary":     "#202020",      # Windows 11 solid dark background
+    "bg_secondary":   "#282828",      # Navigation/Sidebar layers
+    "bg_card":        "#2D2D2D",      # Elevated cards
+    "accent":         "#60CDFF",      # Windows 11 blue accent (Dark Mode)
+    "success":        "#6CCB5F",      # Softer fluent green
+    "danger":         "#FF99A4",      # Fluent pastel red
+    "text_primary":   "#FFFFFF",
+    "text_muted":     "#A0A0A0",
+    "border":         "#333333",      # Crisp, subtle thin borders
+    "accent_hover":   "#4AB4E6",
+    "success_hover":  "#5BB050",
+    "danger_hover":   "#E6858F",
+    "warning":        "#FCE100",
 }
 
 DEFAULT_FILTERS = {

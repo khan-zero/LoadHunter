@@ -65,13 +65,14 @@ class LeadFrame(ctk.CTkFrame):
         on_forward_callback,
         **kwargs,
     ):
-        self._NORMAL_COLOR = COLORS.get("bg_card", "#1E2130")
+        self._NORMAL_COLOR = COLORS["bg_card"]
+        self._HOVER_COLOR = COLORS["bg_secondary"]  # Slightly lighter background
         super().__init__(
             master,
             fg_color=self._NORMAL_COLOR,
-            corner_radius=10,
+            corner_radius=8,
             border_width=1,
-            border_color=COLORS.get("border", "#2E3250"),
+            border_color=COLORS["border"],
             **kwargs,
         )
 
@@ -99,8 +100,8 @@ class LeadFrame(ctk.CTkFrame):
         name_lbl = ctk.CTkLabel(
             header,
             text=f"👤  {sender_name}",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color=COLORS.get("accent", "#5B8CFF"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=COLORS["text_primary"],
             anchor="w",
         )
         name_lbl.grid(row=0, column=0, sticky="w")
@@ -117,12 +118,11 @@ class LeadFrame(ctk.CTkFrame):
         )
         pill.grid(row=0, column=1, padx=(6, 0))
 
-        # Row 1 – snippet
         snippet_lbl = ctk.CTkLabel(
             self,
             text=_truncate(text_to_show),
             font=ctk.CTkFont(size=12),
-            text_color=COLORS.get("text_primary", "#C8CEDE"),
+            text_color=COLORS["text_muted"],
             wraplength=460,
             justify="left",
             anchor="w",
@@ -141,8 +141,8 @@ class LeadFrame(ctk.CTkFrame):
                     width=120,
                     height=26,
                     corner_radius=6,
-                    fg_color=COLORS.get("success", "#2ECC71"),
-                    hover_color=COLORS.get("success_hover", "#27AE60"),
+                    fg_color=COLORS["success"],
+                    hover_color=COLORS["success_hover"],
                     font=ctk.CTkFont(size=11),
                     command=lambda p=phone: webbrowser.open(f"tel:{p}"),
                 )
@@ -161,8 +161,8 @@ class LeadFrame(ctk.CTkFrame):
             width=80,
             height=26,
             corner_radius=6,
-            fg_color=COLORS.get("bg_secondary", "#252840"),
-            hover_color=COLORS.get("border", "#2E3250"),
+            fg_color=COLORS["bg_secondary"],
+            hover_color=COLORS["border"],
             font=ctk.CTkFont(size=11),
             command=self._copy_snippet,
         )
@@ -177,9 +177,9 @@ class LeadFrame(ctk.CTkFrame):
             width=150,
             height=26,
             corner_radius=6,
-            fg_color=COLORS.get("accent", "#5B8CFF") if tg_enabled else COLORS.get("bg_secondary", "#252840"),
-            hover_color=COLORS.get("accent_hover", "#4A7AEE") if tg_enabled else None,
-            text_color="#FFFFFF" if tg_enabled else COLORS.get("text_muted", "#6B7280"),
+            fg_color=COLORS["accent"] if tg_enabled else COLORS["bg_secondary"],
+            hover_color=COLORS["accent_hover"] if tg_enabled else None,
+            text_color="#FFFFFF" if tg_enabled else COLORS["text_muted"],
             state="normal" if tg_enabled else "disabled",
             font=ctk.CTkFont(size=11, weight="bold"),
             command=self._handle_open,
@@ -195,8 +195,8 @@ class LeadFrame(ctk.CTkFrame):
             width=130,
             height=26,
             corner_radius=6,
-            fg_color=COLORS.get("success", "#2ECC71"),
-            hover_color=COLORS.get("success_hover", "#27AE60"),
+            fg_color=COLORS["success"],
+            hover_color=COLORS["success_hover"],
             font=ctk.CTkFont(size=11, weight="bold"),
             command=self._handle_forward,
         )
@@ -281,17 +281,18 @@ class SettingsWindow(ctk.CTkToplevel):
 
     _TITLE_BASE = "Filter Settings"
 
-    def __init__(self, parent, config: dict, on_save, on_import):
+    def __init__(self, parent, config: dict, on_save, on_import, on_logout=None):
         super().__init__(parent)
         self.title(self._TITLE_BASE)
         self.geometry("520x780")
         self.minsize(480, 600)
-        self.configure(fg_color=COLORS.get("bg_primary", "#13152A"))
+        self.configure(fg_color=COLORS["bg_primary"])
         self.attributes("-topmost", True)
 
         self._config = dict(config)
         self._on_save = on_save
         self._on_import = on_import
+        self._on_logout = on_logout
         self._dirty = False
         self.entries: dict[str, tuple] = {}
         self._error_labels: dict[str, ctk.CTkLabel] = {}
@@ -310,7 +311,7 @@ class SettingsWindow(ctk.CTkToplevel):
     # ── Layout builders ───────────────────────────────────────────────────
 
     def _build_header(self):
-        hdr = ctk.CTkFrame(self, fg_color=COLORS.get("bg_secondary", "#1A1D30"), corner_radius=0)
+        hdr = ctk.CTkFrame(self, fg_color=COLORS["bg_secondary"], corner_radius=0)
         hdr.grid(row=0, column=0, sticky="ew")
         hdr.grid_columnconfigure(0, weight=1)
 
@@ -318,7 +319,7 @@ class SettingsWindow(ctk.CTkToplevel):
             hdr,
             text="⚙  Settings",
             font=ctk.CTkFont(size=16, weight="bold"),
-            text_color=COLORS.get("accent", "#5B8CFF"),
+            text_color=COLORS["accent"],
         ).grid(row=0, column=0, padx=20, pady=14, sticky="w")
 
         # Status banner (hidden until needed)
@@ -331,10 +332,10 @@ class SettingsWindow(ctk.CTkToplevel):
     def _build_tabs(self):
         self.tabview = ctk.CTkTabview(
             self,
-            fg_color=COLORS.get("bg_secondary", "#1A1D30"),
-            segmented_button_fg_color=COLORS.get("bg_primary", "#13152A"),
-            segmented_button_selected_color=COLORS.get("accent", "#5B8CFF"),
-            segmented_button_selected_hover_color=COLORS.get("accent_hover", "#4A7AEE"),
+            fg_color=COLORS["bg_secondary"],
+            segmented_button_fg_color=COLORS["bg_primary"],
+            segmented_button_selected_color=COLORS["accent"],
+            segmented_button_selected_hover_color=COLORS["accent_hover"],
         )
         self.tabview.grid(row=1, column=0, padx=16, pady=(12, 4), sticky="nsew")
 
@@ -360,11 +361,11 @@ class SettingsWindow(ctk.CTkToplevel):
             width=120,
             height=34,
             corner_radius=8,
-            fg_color=COLORS.get("bg_secondary", "#1A1D30"),
-            hover_color=COLORS.get("border", "#2E3250"),
+            fg_color=COLORS["bg_secondary"],
+            hover_color=COLORS["border"],
             border_width=1,
-            border_color=COLORS.get("accent", "#5B8CFF"),
-            text_color=COLORS.get("accent", "#5B8CFF"),
+            border_color=COLORS["accent"],
+            text_color=COLORS["accent"],
             font=ctk.CTkFont(size=12),
             command=self._import_action,
         ).grid(row=0, column=0, sticky="w")
@@ -375,8 +376,8 @@ class SettingsWindow(ctk.CTkToplevel):
             width=140,
             height=34,
             corner_radius=8,
-            fg_color=COLORS.get("success", "#2ECC71"),
-            hover_color=COLORS.get("success_hover", "#27AE60"),
+            fg_color=COLORS["success"],
+            hover_color=COLORS["success_hover"],
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._save_action,
         ).grid(row=0, column=2, sticky="e")
@@ -408,20 +409,20 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _add_regex_tester(self, master):
         """Mini panel to test the regex live."""
-        frame = ctk.CTkFrame(master, fg_color=COLORS.get("bg_primary", "#13152A"),
+        frame = ctk.CTkFrame(master, fg_color=COLORS["bg_primary"],
                              corner_radius=8, border_width=1,
-                             border_color=COLORS.get("border", "#2E3250"))
+                             border_color=COLORS["border"])
         frame.pack(fill="x", padx=10, pady=(0, 10))
         frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(frame, text="🔬  Test regex against a sample name",
-                     font=ctk.CTkFont(size=11), text_color=COLORS.get("text_muted", "#6B7280")
+                     font=ctk.CTkFont(size=11), text_color=COLORS["text_muted"]
                      ).grid(row=0, column=0, columnspan=2, padx=10, pady=(8, 2), sticky="w")
 
         self._regex_test_entry = ctk.CTkEntry(
             frame, placeholder_text="Type a name…", height=28,
-            fg_color=COLORS.get("bg_secondary", "#1A1D30"),
-            border_color=COLORS.get("border", "#2E3250"),
+            fg_color=COLORS["bg_secondary"],
+            border_color=COLORS["border"],
         )
         self._regex_test_entry.grid(row=1, column=0, padx=(10, 4), pady=(2, 8), sticky="ew")
         self._regex_test_entry.bind("<KeyRelease>", self._run_regex_test)
@@ -485,6 +486,18 @@ class SettingsWindow(ctk.CTkToplevel):
             fg_color=COLORS.get("danger", "#ef4444"), hover_color=COLORS.get("danger_hover", "#dc2626"),
             command=self._report_issue
         ).pack(side="left")
+
+        if self._on_logout:
+            ctk.CTkButton(
+                btn_frame, text="🚪 Log Out",
+                fg_color="#334155", hover_color="#1E293B",
+                command=self._logout
+            ).pack(side="right")
+
+    def _logout(self):
+        self.destroy()
+        if self._on_logout:
+            self._on_logout()
 
     def _check_updates(self):
         import updater
@@ -681,7 +694,7 @@ class ErrorLogWindow(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Application Logs")
         self.geometry("700x500")
-        self.configure(fg_color=COLORS.get("bg_primary", "#0f1117"))
+        self.configure(fg_color=COLORS["bg_primary"])
         self.attributes("-topmost", True)
         self.log_file_path = log_file_path
 
@@ -689,7 +702,7 @@ class ErrorLogWindow(ctk.CTkToplevel):
         self.grid_rowconfigure(1, weight=1)
 
         # Header
-        header = ctk.CTkFrame(self, fg_color=COLORS.get("bg_secondary", "#161b27"), height=50)
+        header = ctk.CTkFrame(self, fg_color=COLORS["bg_secondary"], height=50, corner_radius=8)
         header.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
         
         ctk.CTkLabel(header, text="📜  Application Logs", font=ctk.CTkFont(size=14, weight="bold")).pack(side="left", padx=15, pady=10)
@@ -708,24 +721,27 @@ class ErrorLogWindow(ctk.CTkToplevel):
         # Log Display
         self.log_box = ctk.CTkTextbox(
             self, 
-            fg_color="#000000", 
+            fg_color="#1E1E1E", # Better log box background
             font=ctk.CTkFont(family="monospace", size=11),
-            text_color=COLORS.get("text_primary", "#e2e8f0")
+            text_color=COLORS["text_primary"],
+            border_width=1,
+            border_color=COLORS["border"],
+            corner_radius=8
         )
         self.log_box.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
         
         # Tags for coloring
-        self.log_box.tag_config("ERROR", foreground=COLORS.get("danger", "#ef4444"))
-        self.log_box.tag_config("WARNING", foreground=COLORS.get("warning", "#f59e0b"))
-        self.log_box.tag_config("INFO", foreground=COLORS.get("accent", "#3b82f6"))
+        self.log_box.tag_config("ERROR", foreground=COLORS["danger"])
+        self.log_box.tag_config("WARNING", foreground=COLORS["warning"])
+        self.log_box.tag_config("INFO", foreground=COLORS["accent"])
 
         # Footer
         footer = ctk.CTkFrame(self, fg_color="transparent")
         footer.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 10))
         
-        ctk.CTkButton(footer, text="Refresh", width=100, command=self._refresh_logs).pack(side="left", padx=5)
-        ctk.CTkButton(footer, text="Clear File", width=100, fg_color=COLORS.get("danger", "#ef4444"), hover_color=COLORS.get("danger_hover", "#dc2626"), command=self._clear_log_file).pack(side="left", padx=5)
-        ctk.CTkButton(footer, text="Close", width=80, command=self.destroy).pack(side="right", padx=5)
+        ctk.CTkButton(footer, text="Refresh", width=100, command=self._refresh_logs, corner_radius=6).pack(side="left", padx=5)
+        ctk.CTkButton(footer, text="Clear File", width=100, fg_color=COLORS["danger"], hover_color=COLORS["danger_hover"], corner_radius=6, command=self._clear_log_file).pack(side="left", padx=5)
+        ctk.CTkButton(footer, text="Close", width=80, command=self.destroy, corner_radius=6).pack(side="right", padx=5)
 
         self._refresh_logs()
 
@@ -780,13 +796,13 @@ class FloatingToast(ctk.CTkFrame):
     A non-intrusive floating notification.
     """
     def __init__(self, parent, message: str, level: str = "info"):
-        fg_color = COLORS.get("accent", "#3b82f6")
+        fg_color = COLORS["accent"]
         if level == "success":
-            fg_color = COLORS.get("success", "#22c55e")
+            fg_color = COLORS["success"]
         elif level == "error":
-            fg_color = COLORS.get("danger", "#ef4444")
+            fg_color = COLORS["danger"]
         elif level == "warning":
-            fg_color = COLORS.get("warning", "#f59e0b")
+            fg_color = COLORS["warning"]
 
         super().__init__(
             parent, 
@@ -824,7 +840,7 @@ class SetupAPIWindow(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("API Key Setup")
         self.geometry("400x350")
-        self.configure(fg_color=COLORS.get("bg_primary", "#13152A"))
+        self.configure(fg_color=COLORS["bg_primary"])
         self.attributes("-topmost", True)
         self.resizable(False, False)
         
@@ -835,16 +851,14 @@ class SetupAPIWindow(ctk.CTkToplevel):
         self._build_ui()
         self._center_on_parent(parent)
         
-    def _build_ui(self):
         ctk.CTkLabel(
             self, text="Welcome to LoadHunter!", 
             font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=COLORS.get("accent", "#5B8CFF")
+            text_color=COLORS["text_primary"]
         ).pack(pady=(20, 10))
-        
         ctk.CTkLabel(
             self, text="Please enter your Telegram API credentials.\nThese will be saved securely.",
-            font=ctk.CTkFont(size=12), text_color=COLORS.get("text_muted", "#6B7280"),
+            font=ctk.CTkFont(size=12), text_color=COLORS["text_muted"],
             justify="center"
         ).pack(pady=5)
         
@@ -859,14 +873,15 @@ class SetupAPIWindow(ctk.CTkToplevel):
         self.api_hash_entry = ctk.CTkEntry(frame, placeholder_text="e.g. abc123def456...")
         self.api_hash_entry.pack(fill="x", pady=(2, 10))
         
-        self.error_label = ctk.CTkLabel(self, text="", text_color=COLORS.get("danger", "#ef4444"), font=ctk.CTkFont(size=11))
+        self.error_label = ctk.CTkLabel(self, text="", text_color=COLORS["danger"], font=ctk.CTkFont(size=11))
         self.error_label.pack()
         
         ctk.CTkButton(
             self, text="Save Credentials", 
-            fg_color=COLORS.get("success", "#2ecc71"),
-            hover_color=COLORS.get("success_hover", "#27ae60"),
+            fg_color=COLORS["success"],
+            hover_color=COLORS["success_hover"],
             font=ctk.CTkFont(weight="bold"),
+            corner_radius=8,
             command=self._save
         ).pack(pady=15)
         
@@ -897,4 +912,190 @@ class SetupAPIWindow(ctk.CTkToplevel):
         w, h = 400, 350
         self.geometry(f"{w}x{h}+{pw - w // 2}+{ph - h // 2}")
 
+
+# ─────────────────────────────────────────────
+#  LoginWindow
+# ─────────────────────────────────────────────
+
+class LoginWindow(ctk.CTkToplevel):
+    """
+    Modern Windows 11-style dialog for Telegram authentication.
+    """
+    def __init__(self, parent, backend, on_success):
+        super().__init__(parent)
+        self.title("Telegram Authentication")
+        self.geometry("360x420")
+        self.configure(fg_color=COLORS["bg_primary"])
+        self.attributes("-topmost", True)
+        self.resizable(False, False)
+        
+        self.backend = backend
+        self.on_success = on_success
+        self.loop = backend.loop
+        self._phone_code_hash = None # Added for robust sign-in
+        
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        
+        self._build_ui()
+        self._center_on_parent(parent)
+
+    def _build_ui(self):
+        # Header Area
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", pady=(30, 10))
+        
+        ctk.CTkLabel(
+            header,
+            text="📱",
+            font=ctk.CTkFont(size=48)
+        ).pack()
+        
+        ctk.CTkLabel(
+            header, text="Sign in to Telegram", 
+            font=ctk.CTkFont(size=22, weight="bold"),
+            text_color=COLORS["text_primary"]
+        ).pack(pady=(10, 5))
+        
+        self.subtitle = ctk.CTkLabel(
+            header, text="Please confirm your phone number.",
+            font=ctk.CTkFont(size=12), text_color=COLORS["text_muted"]
+        )
+        self.subtitle.pack()
+
+        # Input Area
+        self.input_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.input_frame.pack(fill="x", padx=40, pady=10)
+        
+        self.phone_entry = ctk.CTkEntry(
+            self.input_frame, 
+            placeholder_text="Phone Number (+998...)",
+            height=36,
+            corner_radius=8,
+            fg_color=COLORS["bg_secondary"],
+            border_color=COLORS["border"]
+        )
+        self.phone_entry.pack(fill="x", pady=5)
+        
+        self.code_entry = ctk.CTkEntry(
+            self.input_frame, 
+            placeholder_text="Enter Verification Code",
+            height=36,
+            corner_radius=8,
+            fg_color=COLORS["bg_secondary"],
+            border_color=COLORS["border"]
+        )
+        # Verify code is hidden initially
+        
+        self.error_label = ctk.CTkLabel(self.input_frame, text="", text_color=COLORS["danger"], font=ctk.CTkFont(size=11))
+        self.error_label.pack(pady=2)
+
+        self.action_btn = ctk.CTkButton(
+            self.input_frame, 
+            text="Send Code",
+            height=36,
+            corner_radius=8,
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            font=ctk.CTkFont(weight="bold"),
+            command=self._send_code
+        )
+        self.action_btn.pack(fill="x", pady=10)
+
+        self.resend_btn = ctk.CTkButton(
+            self.input_frame, 
+            text="Resend Code",
+            height=36,
+            corner_radius=8,
+            fg_color="transparent",
+            text_color=COLORS["accent"],
+            hover_color=COLORS["bg_secondary"],
+            font=ctk.CTkFont(weight="bold"),
+            command=self._send_code
+        )
+        # Verify code and Resend button are hidden initially
+
+    def _send_code(self):
+        import asyncio
+        phone = self.phone_entry.get().strip()
+        if not phone:
+            self.error_label.configure(text="Phone number is required.")
+            return
+
+        self.subtitle.configure(text="Connecting to Telegram...")
+        self.action_btn.configure(state="disabled")
+        self.resend_btn.configure(state="disabled")
+        self.error_label.configure(text="")
+        
+        async def run_auth():
+            try:
+                # 1. CRITICAL: Ensure client is fully connected and wait for it
+                if not self.backend.client.is_connected():
+                    await self.backend.client.connect()
+                
+                self.after(0, lambda: self.subtitle.configure(text="Requesting code..."))
+                
+                # 2. Request the code and capture the result
+                result = await self.backend.client.send_code_request(phone)
+                self._phone_code_hash = result.phone_code_hash
+                
+                self.after(0, self._show_code_input)
+                self.after(0, lambda: self.resend_btn.configure(state="normal"))
+            except Exception as e:
+                logging.error(f"Failed to send code: {e}")
+                self.after(0, lambda: self.action_btn.configure(state="normal"))
+                self.after(0, lambda: self.error_label.configure(text=f"Error: {e}"))
+                self.after(0, lambda: self.subtitle.configure(text="Could not send code."))
+
+        asyncio.run_coroutine_threadsafe(run_auth(), self.loop)
+
+    def _show_code_input(self):
+        self.phone_entry.configure(state="disabled")
+        self.subtitle.configure(text="We've sent a verification code to your app.")
+        self.code_entry.pack(fill="x", pady=5, before=self.error_label)
+        self.action_btn.configure(text="Verify & Sign In", state="normal", command=self._verify_code)
+        self.resend_btn.pack(fill="x", pady=(0, 10))
+
+    def _verify_code(self):
+        import asyncio
+        phone = self.phone_entry.get().strip()
+        code = self.code_entry.get().strip()
+        
+        if not code:
+            self.error_label.configure(text="Verification code is required.")
+            return
+
+        self.action_btn.configure(state="disabled")
+        self.resend_btn.configure(state="disabled")
+        self.subtitle.configure(text="Verifying...")
+        
+        future = asyncio.run_coroutine_threadsafe(
+            self.backend.client.sign_in(phone, code, phone_code_hash=self._phone_code_hash), 
+            self.loop
+        )
+        
+        def on_sign_in(f):
+            try:
+                f.result()
+                self.on_success()
+                self.destroy()
+            except Exception as e:
+                self.action_btn.configure(state="normal")
+                self.resend_btn.configure(state="normal")
+                self.error_label.configure(text=f"Invalid Code: {e}")
+                self.subtitle.configure(text="Failed to verify.")
+                
+        future.add_done_callback(lambda f: self.after(0, on_sign_in, f))
+
+    def _on_close(self):
+        import sys
+        from tkinter import messagebox
+        if messagebox.askyesno("Exit", "Cancel login and close application?", parent=self):
+            sys.exit(0)
+
+    def _center_on_parent(self, parent):
+        self.update_idletasks()
+        pw = parent.winfo_rootx() + parent.winfo_width() // 2
+        ph = parent.winfo_rooty() + parent.winfo_height() // 2
+        w, h = 360, 420
+        self.geometry(f"{w}x{h}+{pw - w // 2}+{ph - h // 2}")
 
