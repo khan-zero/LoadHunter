@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+      - 'v*'
 
 permissions:
   contents: write
@@ -17,9 +17,10 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            build_cmd: pyinstaller --noconfirm --hidden-import=filter_engine main.spec
+            # REMOVED invalid flags - the .spec file handles these now
+            build_cmd: pyinstaller --noconfirm main.spec
           - os: ubuntu-latest
-            build_cmd: pyinstaller --noconfirm --hidden-import=filter_engine main.spec
+            build_cmd: pyinstaller --noconfirm main.spec
 
     steps:
       - name: Checkout Code
@@ -48,14 +49,11 @@ jobs:
       - name: Create DEB package (Linux)
         if: runner.os == 'Linux'
         run: |
-          # Extract the version without the 'v'
           VERSION=${GITHUB_REF_NAME#v}
           mkdir -p package/usr/local/bin
           mkdir -p package/DEBIAN
           cp dist/LoadHunter package/usr/local/bin/loadhunter
           chmod +x package/usr/local/bin/loadhunter
-          
-          # Create the Debian control file
           cat <<EOF > package/DEBIAN/control
           Package: loadhunter
           Version: ${VERSION}
@@ -66,8 +64,6 @@ jobs:
           Depends: python3-tk, xclip, xsel
           Description: LoadHunter - Modular Logistics Filter and Forwarder for Telegram.
           EOF
-          
-          # Build the package
           dpkg-deb --build package loadhunter_${VERSION}_amd64.deb
 
       - name: Prepare Windows Executable

@@ -4,20 +4,35 @@ import customtkinter
 
 block_cipher = None
 
-# Find customtkinter package path
+# Find project and customtkinter paths
+work_dir = os.path.abspath(os.getcwd())
 ctk_path = os.path.dirname(customtkinter.__file__)
 
 a = Analysis(
     ['main.py'],
-    pathex=[os.path.abspath('.')],
+    pathex=[work_dir],
     binaries=[],
     datas=[
         (os.path.join(ctk_path, "assets"), "customtkinter/assets"),
+        ('filter_engine.py', '.'),  # Fixes ModuleNotFoundError
+        ('config.py', '.'),
+        ('backend.py', '.'),
     ],
     hiddenimports=[
-        'config', 'filter_engine', 'ui_components', 'backend', 
-        'updater', 'darkdetect', 'telethon', 'PIL', 'PIL._imagingtk', 
-        'PIL.ImageTk', 'PIL.Image', 'tkinter', 'tkinter.filedialog', 'tkinter.messagebox'
+        'filter_engine',
+        'config', 
+        'ui_components', 
+        'backend', 
+        'updater', 
+        'darkdetect', 
+        'telethon', 
+        'PIL', 
+        'PIL._imagingtk', 
+        'PIL.ImageTk', 
+        'PIL.Image', 
+        'tkinter', 
+        'tkinter.filedialog', 
+        'tkinter.messagebox'
     ],
     hookspath=[],
     hooksconfig={},
@@ -44,7 +59,8 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    # Set console=True temporarily if you need to debug startup crashes
+    console=False, 
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
