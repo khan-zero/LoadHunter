@@ -17,9 +17,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            build_cmd: pyinstaller --noconfirm main.spec
+            build_cmd: pyinstaller --noconfirm --hidden-import=filter_engine main.spec
           - os: ubuntu-latest
-            build_cmd: pyinstaller --noconfirm main.spec
+            build_cmd: pyinstaller --noconfirm --hidden-import=filter_engine main.spec
 
     steps:
       - name: Checkout Code

@@ -13,7 +13,17 @@ import logging
 from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials, LOG_FILE
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
-from filter_engine import FilterEngine
+
+try:
+    from filter_engine import FilterEngine
+except ImportError:
+    # This might happen if PyInstaller fails to bundle it properly in some environments
+    import logging
+    logging.error("CRITICAL: Module 'filter_engine' not found. Ensure it's bundled correctly.")
+    class FilterEngine:
+        def __init__(self, *args, **kwargs): pass
+        def is_spam(self, *args, **kwargs): return None
+
 from ui_components import LeadFrame, SettingsWindow, ErrorLogWindow, FloatingToast, SetupAPIWindow, LoginWindow
 from backend import LoadHunterBackend
 
