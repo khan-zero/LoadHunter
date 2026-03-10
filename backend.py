@@ -7,11 +7,12 @@ from telethon.tl.functions.messages import GetCommonChatsRequest
 from config import API_ID, API_HASH, SESSION_DIR
 
 class LoadHunterBackend:
-    def __init__(self, loop, on_lead_callback, on_groups_callback, on_error_callback, on_ready_callback=None):
+    def __init__(self, loop, on_lead_callback, on_groups_callback, on_error_callback, on_filter_log_callback=None, on_ready_callback=None):
         self.loop = loop
         self.on_lead = on_lead_callback
         self.on_groups = on_groups_callback
         self.on_error = on_error_callback
+        self.on_filter_log = on_filter_log_callback
         self.on_ready = on_ready_callback
         
         self.client = None
@@ -74,7 +75,8 @@ class LoadHunterBackend:
         
         try:
             logging.info("Connecting to Telegram...")
-            await self.client.connect()
+            # Use a timeout for the initial connection
+            await asyncio.wait_for(self.client.connect(), timeout=30)
             
             if not await self.client.is_user_authorized():
                 self._starting = False
@@ -122,6 +124,15 @@ class LoadHunterBackend:
                             common_count = 0
                     
                     reason = self.filter_engine.is_spam(event.text, sender, common_count, media=event.media)
+                    
+                    first_name = getattr(sender, 'first_name', '') or ''
+                    last_name = getattr(sender, 'last_name', '') or ''
+                    name = f"{first_name} {last_name}".strip() or "Unknown"
+
+                    if self.on_filter_log:
+                        status = "REJECTED: " + reason if reason else "PASSED"
+                        self.on_filter_log(name, status)
+
                     if not reason:
                         # Construct robust tg:// link for direct app opening
                         try:
@@ -132,28 +143,25 @@ class LoadHunterBackend:
                             else:
                                 # For private groups/channels, use privatepost with the 100-prefix (absolute ID)
                                 peer_id = abs(utils.get_peer_id(event.input_chat))
-                                # Telethon IDs for channels start with 100... when marked. 
-                                # If it's not already starting with 100, we might need to add it, 
-                                # but usually Telethon's get_peer_id on a channel returns the -100... ID.
                                 tg_link = f"tg://privatepost?channel={peer_id}&post={event.id}"
                         except Exception:
-                            # Safe fallback
                             tg_link = f"tg://openmessage?chat_id={event.chat_id}&message_id={event.id}"
                         
-                        first_name = getattr(sender, 'first_name', '') or ''
-                        last_name = getattr(sender, 'last_name', '') or ''
-                        name = f"{first_name} {last_name}".strip() or "Unknown"
                         self.on_lead(name, common_count, event.text or "[Media/No Text]", tg_link, event.chat_id, event.id)
                 except Exception as e:
                     logging.error(f"Error in backend handler: {e}", exc_info=True)
 
             await self.client.run_until_disconnected()
-        except asyncio.CancelledError:
-            pass
-        except errors.FloodWaitError as e:
-            logging.error(f"Flood wait for {e.seconds} seconds")
+        except (asyncio.TimeoutError, ConnectionError) as e:
+            logging.error(f"Telegram connection timed out or failed: {e}")
+            self._starting = False
+            self.on_error("CONNECTION_FAILED")
+            return
         except Exception as e:
             logging.error(f"Client initialization error: {e}", exc_info=True)
+            self._starting = False
+            self.on_error("INIT_FAILED")
+            return
         finally:
             self._starting = False
 

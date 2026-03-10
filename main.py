@@ -38,6 +38,9 @@ class LogHandler(logging.Handler):
 class LoadHunterApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        # Hide main window initially for the Splash Screen
+        self.withdraw()
+        
         self.title("LoadHunter - Modular Logistics Filter")
         self.geometry("950x800")
         self.configure(fg_color=COLORS["bg_primary"])
@@ -60,6 +63,7 @@ class LoadHunterApp(ctk.CTk):
             on_lead_callback=self.on_lead_received,
             on_groups_callback=self.update_groups_ui,
             on_error_callback=self.handle_backend_error,
+            on_filter_log_callback=self.on_filter_traffic,
             on_ready_callback=self.on_backend_ready
         )
         
@@ -67,8 +71,6 @@ class LoadHunterApp(ctk.CTk):
         self.update_logging_handlers()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Hide main window initially for the Splash Screen
-        self.withdraw()
         self.after(100, self.show_splash_screen)
 
     def show_splash_screen(self):
@@ -135,6 +137,8 @@ class LoadHunterApp(ctk.CTk):
             self.splash.destroy()
         
         self.deiconify() # Show the main UI
+        self.show_toast("Telegram Connected!", "success")
+        self.update_status_indicator("Ready", COLORS["text_muted"])
         
         # Start listening automatically
         if not self.backend.listening:
@@ -173,9 +177,23 @@ class LoadHunterApp(ctk.CTk):
         self.count_label = ctk.CTkLabel(self.side_panel, text="Total Caught: 0", font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS["success"])
         self.count_label.pack(pady=10)
 
-        self.groups_box = ctk.CTkTextbox(self.side_panel, height=200, fg_color=COLORS["bg_primary"], font=ctk.CTkFont(size=11), state="disabled")
-        self.groups_box.pack(padx=10, pady=5, fill="x")
+        # Tabview for side panel utilities
+        self.side_tabs = ctk.CTkTabview(self.side_panel, height=550, fg_color=COLORS["bg_primary"])
+        self.side_tabs.pack(padx=10, pady=5, fill="both", expand=True)
+        
+        tab_groups = self.side_tabs.add("Groups")
+        tab_system = self.side_tabs.add("System")
+        tab_traffic = self.side_tabs.add("Traffic")
 
+        self.groups_box = ctk.CTkTextbox(tab_groups, fg_color="#000000", font=ctk.CTkFont(size=11), state="disabled")
+        self.groups_box.pack(padx=5, pady=5, fill="both", expand=True)
+
+        self.log_box = ctk.CTkTextbox(tab_system, fg_color="#000000", font=ctk.CTkFont(family="monospace", size=10), state="disabled")
+        self.log_box.pack(padx=5, pady=5, fill="both", expand=True)
+        
+        self.traffic_box = ctk.CTkTextbox(tab_traffic, fg_color="#000000", font=ctk.CTkFont(family="monospace", size=10), state="disabled")
+        self.traffic_box.pack(padx=5, pady=5, fill="both", expand=True)
+        
         # Status Indicator
         self.status_frame = ctk.CTkFrame(self.side_panel, fg_color="transparent")
         self.status_frame.pack(pady=10, fill="x", padx=10)
@@ -187,25 +205,50 @@ class LoadHunterApp(ctk.CTk):
         self.status_text.pack(side="left", padx=5)
 
         ctk.CTkButton(self.side_panel, text="📋 View Full Logs", height=30, fg_color=COLORS["bg_card"], hover_color=COLORS["border"], command=self.open_logs).pack(pady=5, padx=10, fill="x")
-
-        ctk.CTkLabel(self.side_panel, text="Terminal Logs:", font=ctk.CTkFont(size=12)).pack(pady=(10, 5))
-        self.log_box = ctk.CTkTextbox(self.side_panel, height=300, fg_color="#000000", font=ctk.CTkFont(family="monospace", size=10), state="disabled")
-        self.log_box.pack(padx=10, pady=5, fill="both", expand=True)
         
-        # Setup Log Handler
+        # Setup Log Handlers
         self.setup_logging_ui()
 
     def setup_logging_ui(self):
         # Pre-configure tags for different levels
-        self.log_box.tag_config("error", foreground=COLORS["danger"])
-        self.log_box.tag_config("warning", foreground="#ff9800")
-        self.log_box.tag_config("success", foreground=COLORS["success"])
-        self.log_box.tag_config("info", foreground=COLORS["accent"])
-        self.log_box.tag_config("default", foreground=COLORS["text_primary"])
+        for box in [self.log_box, self.traffic_box]:
+            box.tag_config("error", foreground=COLORS["danger"])
+            box.tag_config("warning", foreground="#ff9800")
+            box.tag_config("success", foreground=COLORS["success"])
+            box.tag_config("info", foreground=COLORS["accent"])
+            box.tag_config("default", foreground=COLORS["text_primary"])
+            box.tag_config("gray", foreground="#666666")
         
         handler = LogHandler(self.update_log_ui)
         handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
         logging.getLogger().addHandler(handler)
+
+    def on_filter_traffic(self, sender, status):
+        """Called by backend for every message processed."""
+        from datetime import datetime
+        time_str = datetime.now().strftime("%H:%M:%S")
+        tag = "default"
+        
+        if "PASSED" in status:
+            tag = "success"
+        elif "REJECTED" in status:
+            tag = "gray"
+            
+        msg = f"[{time_str}] {sender[:15]:<15} | {status}"
+        self.after(0, lambda m=msg, t=tag: self._append_traffic_log(m, t))
+
+    def _append_traffic_log(self, msg, tag):
+        try:
+            if not self.traffic_box.winfo_exists(): return
+            self.traffic_box.configure(state="normal")
+            self.traffic_box.insert("end", msg + "\n", (tag,))
+            self.traffic_box.see("end")
+            # Limit scrollback to 500 lines
+            if int(self.traffic_box.index('end-1c').split('.')[0]) > 500:
+                self.traffic_box.delete("1.0", "2.0")
+            self.traffic_box.configure(state="disabled")
+        except Exception:
+            pass
 
     def update_logging_handlers(self):
         """Adds or removes the FileHandler based on config."""
@@ -352,11 +395,6 @@ class LoadHunterApp(ctk.CTk):
                 logging.error(f"Logout Error: {e}")
 
         asyncio.run_coroutine_threadsafe(do_logout(), self.loop)
-
-    def on_backend_ready(self):
-        self.deiconify() # Show main window
-        self.show_toast("Telegram Connected!", "success")
-        self.update_status_indicator("Ready", COLORS["text_muted"])
 
     def update_config(self, new_config):
         self.app_config = new_config
