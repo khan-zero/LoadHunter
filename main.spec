@@ -13,7 +13,6 @@ a = Analysis(
     binaries=[],
     datas=[
         (os.path.join(ctk_path, "assets"), "customtkinter/assets"),
-        (os.path.join(ctk_path, "themes"), "customtkinter/themes"),
     ],
     hiddenimports=[
         'config', 'filter_engine', 'ui_components', 'backend', 
