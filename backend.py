@@ -48,7 +48,7 @@ class LoadHunterBackend:
     def _run_event_loop(self):
         """Runs the asyncio event loop in a dedicated thread."""
         asyncio.set_event_loop(self.loop)
-        self._loop_ready.set()
+        self._loop_ready.set()  # Move this to the top to unblock start() immediately
         try:
             self.loop.run_forever()
         except Exception as e:

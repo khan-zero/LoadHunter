@@ -80,13 +80,14 @@ class LoadHunterApp(ctk.CTk):
         self._file_handler = None
         
         # Load filters from JSON
-        from config import DEFAULT_FILTERS
-        self.app_config = load_filters()
-        if not self.app_config or not isinstance(self.app_config, dict):
-            self.app_config = DEFAULT_FILTERS
+        import config
+        self.app_config = config.load_filters()
+        if self.app_config is None:
+            self.app_config = config.DEFAULT_FILTERS
             
-        save_filters(self.app_config)
+        config.save_filters(self.app_config)
         
+        from filter_engine import FilterEngine
         self.filter_engine = FilterEngine(self.app_config)
         self.loop = asyncio.new_event_loop()
         self.lead_count = 0
