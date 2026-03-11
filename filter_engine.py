@@ -100,8 +100,9 @@ class FilterEngine:
 
         # 6. Template Detection
         max_lines = self.config.get('max_line_breaks', 5)
-        if text_content.count('\n') > max_lines: 
-            return f"Template: {text_content.count('\n')} lines"
+        line_count = text_content.count('\n')
+        if line_count > max_lines: 
+            return f"Template: {line_count} lines"
         
         if self.emoji_regex.search(text_content): 
             return "Marketing: Contains Emoji"

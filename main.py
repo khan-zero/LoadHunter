@@ -80,7 +80,11 @@ class LoadHunterApp(ctk.CTk):
         self._file_handler = None
         
         # Load filters from JSON
+        from config import DEFAULT_FILTERS
         self.app_config = load_filters()
+        if not self.app_config or not isinstance(self.app_config, dict):
+            self.app_config = DEFAULT_FILTERS
+            
         save_filters(self.app_config)
         
         self.filter_engine = FilterEngine(self.app_config)
