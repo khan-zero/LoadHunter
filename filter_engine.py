@@ -3,7 +3,8 @@ from telethon.tl.types import MessageMediaDocument, DocumentAttributeSticker, Me
 
 class FilterEngine:
     def __init__(self, config):
-        self.config = config
+        from config import DEFAULT_FILTERS
+        self.config = config if config is not None else DEFAULT_FILTERS
         self._compile_regex()
         # Uzbek common stop-words from FILTER_RULES.md
         self.uz_stop_words = ["yuk bor", "mashina kerak", "aka", "fura", "ref", "yuk", "bor", "kerak", "nechi", "tonna"]
