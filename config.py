@@ -47,6 +47,7 @@ FILTERS_CONFIG_FILE = os.path.join(DATA_DIR, 'filters.json')
 SUCCESSFUL_LEADS_FILE = os.path.join(DATA_DIR, 'successful_leads.txt')
 CREDENTIALS_FILE = os.path.join(DATA_DIR, 'credentials.json')
 LOG_FILE = os.path.join(DATA_DIR, 'loadhunter.log')
+ERROR_LOG_FILE = os.path.join(DATA_DIR, 'error_log.txt')
 ENV_FILE = os.path.join(APP_DIR, '.env')
 
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -97,21 +98,53 @@ DEFAULT_FILTERS = {
     "max_common_groups": 2,
     "min_uz_char_percentage": 0.3,
     "show_terminal_logs": True,
-    "forward_destinations": ["me"]
+    "save_critical_logs": True,
+    "forward_destinations": ["me"],
+    "check_feminine": True
 }
 
+def sanity_check_filters(config):
+    """Verifies that the config contains all required keys and valid types."""
+    if not isinstance(config, dict):
+        return DEFAULT_FILTERS
+    
+    # Ensure all default keys exist
+    for key, value in DEFAULT_FILTERS.items():
+        if key not in config:
+            config[key] = value
+            
+    # Validate specific types
+    if not isinstance(config.get("blacklist_keywords"), list):
+        config["blacklist_keywords"] = DEFAULT_FILTERS["blacklist_keywords"]
+    if not isinstance(config.get("bot_service_keywords"), list):
+        config["bot_service_keywords"] = DEFAULT_FILTERS["bot_service_keywords"]
+    if not isinstance(config.get("forward_destinations"), list):
+        config["forward_destinations"] = DEFAULT_FILTERS["forward_destinations"]
+        
+    return config
+
 def load_filters():
+    """Loads filters from file with validation and fallback."""
     if os.path.exists(FILTERS_CONFIG_FILE):
         try:
             with open(FILTERS_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return {**DEFAULT_FILTERS, **json.load(f)}
-        except:
+                loaded_config = json.load(f)
+                return sanity_check_filters(loaded_config)
+        except (json.JSONDecodeError, IOError, Exception):
+            # If corrupted or unreadable, reset to default
+            save_filters(DEFAULT_FILTERS)
             return DEFAULT_FILTERS
     return DEFAULT_FILTERS
 
 def save_filters(config):
-    with open(FILTERS_CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config, f, indent=4, ensure_ascii=False)
+    """Saves filters to the OS-specific data directory."""
+    try:
+        validated_config = sanity_check_filters(config)
+        with open(FILTERS_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(validated_config, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Error saving filters: {e}")
+
 
 def log_successful_lead(text):
     with open(SUCCESSFUL_LEADS_FILE, 'a', encoding='utf-8') as f:

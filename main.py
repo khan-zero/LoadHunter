@@ -10,9 +10,30 @@ import logging
 # No manual sys.path manipulation is needed.
 # ---------------------------------------------------------------------------
 
-from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials, LOG_FILE
+from config import COLORS, load_filters, save_filters, API_ID, API_HASH, FILTERS_CONFIG_FILE, log_successful_lead, save_credentials, LOG_FILE, ERROR_LOG_FILE
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
+from datetime import datetime
+
+def startup_error_handler(exc_type, exc_value, exc_traceback):
+    """Global handler for uncaught exceptions during startup."""
+    import traceback
+    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    try:
+        with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"\n--- CRITICAL STARTUP ERROR {datetime.now()} ---\n{error_msg}\n")
+    except:
+        pass
+    
+    # Show a user-friendly popup before dying
+    ctk.set_appearance_mode("dark")
+    dummy = ctk.CTk()
+    dummy.withdraw()
+    messagebox.showerror(
+        "Startup Failed", 
+        f"LoadHunter failed to start.\n\nError details saved to:\n{ERROR_LOG_FILE}\n\nError: {exc_value}"
+    )
+    sys.exit(1)
 
 try:
     from filter_engine import FilterEngine
@@ -407,11 +428,12 @@ class LoadHunterApp(ctk.CTk):
         asyncio.run_coroutine_threadsafe(do_logout(), self.loop)
 
     def update_config(self, new_config):
-        self.app_config = new_config
-        self.filter_engine.config = new_config
+        from config import sanity_check_filters
+        self.app_config = sanity_check_filters(new_config)
+        self.filter_engine.config = self.app_config
         self.filter_engine._compile_regex()
         self.update_logging_handlers()
-        logging.info("Configuration updated.")
+        logging.info("Configuration updated and re-validated.")
 
     def import_config(self):
         file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
@@ -459,8 +481,20 @@ class LoadHunterApp(ctk.CTk):
         threading.Thread(target=shutdown, daemon=True).start()
 
 if __name__ == "__main__":
+    # Set global error handler for startup
+    sys.excepthook = startup_error_handler
+    
     try:
         app = LoadHunterApp()
         app.mainloop()
     except Exception as e:
+        import traceback
         logging.critical(f"Application crashed: {e}", exc_info=True)
+        # Also ensure it goes to the dedicated error log
+        try:
+            with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(f"\n--- RUNTIME CRASH {datetime.now()} ---\n{traceback.format_exc()}\n")
+        except:
+            pass
+        
+        messagebox.showerror("Critical Error", f"The application has crashed.\n\nDetails:\n{e}")
