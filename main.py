@@ -45,7 +45,7 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
         def is_spam(self, *args, **kwargs): return None
 
-from ui_components import LeadFrame, SettingsWindow, ErrorLogWindow, FloatingToast, SetupAPIWindow, LoginWindow
+from ui_components import LeadFrame, SettingsWindow, ErrorLogWindow, FloatingToast, SetupAPIWindow, LoginWindow, ModernConfirmDialog
 from backend import LoadHunterBackend
 
 # Configure initial logging
@@ -68,46 +68,51 @@ class LogHandler(logging.Handler):
 
 class LoadHunterApp(ctk.CTk):
     def __init__(self):
-        super().__init__()
-        # Hide main window initially for the Splash Screen
-        self.withdraw()
-        
-        self.title("LoadHunter - Modular Logistics Filter")
-        self.geometry("950x800")
-        self.configure(fg_color=COLORS["bg_primary"])
-        
-        # Internal log management
-        self._file_handler = None
-        
-        # Load filters from JSON
-        import config
-        self.app_config = config.load_filters()
-        if self.app_config is None:
-            self.app_config = config.DEFAULT_FILTERS
+        try:
+            super().__init__()
+            # Hide main window initially for the Splash Screen
+            self.withdraw()
             
-        config.save_filters(self.app_config)
-        
-        from filter_engine import FilterEngine
-        self.filter_engine = FilterEngine(self.app_config)
-        self.loop = asyncio.new_event_loop()
-        self.lead_count = 0
-        self.leads = []
-        
-        # Backend setup
-        self.backend = LoadHunterBackend(
-            loop=self.loop,
-            on_lead_callback=self.on_lead_received,
-            on_groups_callback=self.update_groups_ui,
-            on_error_callback=self.handle_backend_error,
-            on_filter_log_callback=self.on_filter_traffic,
-            on_ready_callback=self.on_backend_ready
-        )
-        
-        self.setup_ui()
-        self.update_logging_handlers()
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        self.after(100, self.show_splash_screen)
+            self.title("LoadHunter - Modular Logistics Filter")
+            self.geometry("950x800")
+            self.configure(fg_color=COLORS["bg_primary"])
+            
+            # Internal log management
+            self._file_handler = None
+            
+            # Load filters from JSON
+            import config
+            self.app_config = config.load_filters()
+            if self.app_config is None:
+                self.app_config = config.DEFAULT_FILTERS
+                
+            config.save_filters(self.app_config)
+            
+            from filter_engine import FilterEngine
+            self.filter_engine = FilterEngine(self.app_config)
+            self.loop = asyncio.new_event_loop()
+            self.lead_count = 0
+            self.leads = []
+            
+            # Backend setup
+            self.backend = LoadHunterBackend(
+                loop=self.loop,
+                on_lead_callback=self.on_lead_received,
+                on_groups_callback=self.update_groups_ui,
+                on_error_callback=self.handle_backend_error,
+                on_filter_log_callback=self.on_filter_traffic,
+                on_ready_callback=self.on_backend_ready
+            )
+            
+            self.setup_ui()
+            self.update_logging_handlers()
+            self.protocol("WM_DELETE_WINDOW", self.on_closing)
+            
+            self.after(100, self.show_splash_screen)
+        except Exception as e:
+            logging.critical(f"Failed to initialize application: {e}", exc_info=True)
+            # Re-raise to be caught by the global excepthook
+            raise
 
     def show_splash_screen(self):
         self.splash = ctk.CTkToplevel(self)
@@ -115,6 +120,9 @@ class LoadHunterApp(ctk.CTk):
         self.splash.geometry("400x250")
         self.splash.configure(fg_color=COLORS["bg_primary"])
         self.splash.overrideredirect(True) # Remove windows borders for a cleaner splash
+        
+        # Add emergency exit binding - Use os._exit for immediate termination during splash
+        self.splash.bind("<Escape>", lambda e: os._exit(0))
         
         self.splash.update_idletasks()
         pw = self.winfo_screenwidth() // 2
@@ -124,6 +132,15 @@ class LoadHunterApp(ctk.CTk):
 
         self.splash.grid_rowconfigure(0, weight=1)
         self.splash.grid_columnconfigure(0, weight=1)
+        
+        # Small emergency quit button in corner - Immediate exit
+        quit_btn = ctk.CTkButton(
+            self.splash, text="✕", width=24, height=24, 
+            fg_color="transparent", text_color=COLORS["text_muted"],
+            hover_color=COLORS["danger"], corner_radius=12,
+            command=lambda: os._exit(0)
+        )
+        quit_btn.place(relx=0.98, rely=0.02, anchor="ne")
         
         frame = ctk.CTkFrame(self.splash, fg_color="transparent")
         frame.grid(row=0, column=0)
@@ -144,28 +161,64 @@ class LoadHunterApp(ctk.CTk):
         self.splash_progress.pack()
         self.splash_progress.set(0)
         self.splash_progress.start()
+
+        self.manual_setup_btn = ctk.CTkButton(
+            frame, text="Setup Manually", 
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent", text_color=COLORS["accent"],
+            hover_color=COLORS["bg_secondary"],
+            command=self._manual_setup_trigger
+        )
+        self.manual_setup_btn.pack(pady=(10, 0))
         
         self.after(500, self.check_api_keys)
+
+    def _manual_setup_trigger(self):
+        """Manually trigger the API setup window from the splash screen."""
+        if hasattr(self, 'splash') and self.splash.winfo_exists():
+            self.splash.destroy()
+        SetupAPIWindow(self, self.on_api_keys_saved)
 
     def check_api_keys(self):
         from config import API_ID, API_HASH
         if not API_ID or not API_HASH:
-            self.splash_progress.stop()
-            self.splash_status.configure(text="Waiting for API Keys...")
-            # We must set SetupAPIWindow's parent to the splash so it displays above it
-            SetupAPIWindow(self.splash, self.on_api_keys_saved)
+            logging.info("API keys missing, destroying splash screen and showing setup...")
+            if hasattr(self, 'splash') and self.splash.winfo_exists():
+                self.splash.destroy()
+            
+            # Show setup window centered on the (hidden) main window or screen
+            SetupAPIWindow(self, self.on_api_keys_saved)
         else:
             self.splash_status.configure(text="Connecting to Telegram...")
+            # Set a 45 second timeout for connection - if it doesn't work, let the user know
+            self._startup_timer = self.after(45000, self._handle_startup_timeout)
             self.backend.start(self.filter_engine)
+
+    def _handle_startup_timeout(self):
+        """Called if connection takes too long."""
+        if hasattr(self, 'splash') and self.splash.winfo_exists():
+            logging.warning("Startup timed out during splash screen.")
+            self.splash_status.configure(text="Connection taking too long...")
+            if messagebox.askretrycancel("Connection Timeout", "Connecting to Telegram is taking longer than expected.\n\nRetry?"):
+                self.after(500, self.check_api_keys)
+            else:
+                self.on_closing()
             
     def on_api_keys_saved(self, api_id, api_hash):
         save_credentials(api_id, api_hash)
-        self.splash_progress.start()
-        self.splash_status.configure(text="Connecting to Telegram...")
+        # Restore splash screen if it was destroyed during setup window
+        if not hasattr(self, 'splash') or not self.splash.winfo_exists():
+            self.show_splash_screen()
+        else:
+            self.splash_progress.start()
+            self.splash_status.configure(text="Connecting to Telegram...")
+        
         self.backend.start(self.filter_engine)
 
     def on_backend_ready(self):
         """Called by backend when Telegram is fully connected and authorized."""
+        if hasattr(self, '_startup_timer'):
+            self.after_cancel(self._startup_timer)
         self.after(0, self._finalize_startup)
         
     def _finalize_startup(self):
@@ -396,12 +449,20 @@ class LoadHunterApp(ctk.CTk):
         self.groups_box.configure(state="disabled")
 
     def handle_backend_error(self, error_code):
+        if hasattr(self, '_startup_timer'):
+            self.after_cancel(self._startup_timer)
+            
         if hasattr(self, 'splash') and self.splash.winfo_exists():
             self.splash.destroy() # Ensure splash is gone if we hit an error
 
         if error_code == "AUTH_REQUIRED":
             self.withdraw() # Ensure main window stays hidden during login
             self.after(0, self.request_login)
+        elif error_code in ["CONNECTION_FAILED", "INIT_FAILED", "LOOP_TIMEOUT", "CREDENTIALS_MISSING"]:
+            self.deiconify()
+            logging.error(f"Critical Backend Error: {error_code}")
+            messagebox.showerror("Connection Error", f"LoadHunter could not connect to Telegram.\n\nError Code: {error_code}\n\nPlease check your internet connection and API keys.")
+            self.update_status_indicator("Connection Error", COLORS["danger"])
         else:
             self.deiconify() # Force UI to show so the user sees the error
             logging.error(f"Backend Error: {error_code}")
@@ -409,10 +470,24 @@ class LoadHunterApp(ctk.CTk):
             self.update_status_indicator("Error", COLORS["danger"])
 
     def open_settings(self):
-        SettingsWindow(self, self.app_config, on_save=self.update_config, on_import=self.import_config, on_logout=self.logout_app)
+        SettingsWindow(self, self.app_config, 
+                       on_save=self.update_config, 
+                       on_import=self.import_config, 
+                       on_logout=self.logout_app,
+                       on_api_setup=self.trigger_manual_api_change)
+
+    def trigger_manual_api_change(self):
+        """Open the API setup window from the settings screen."""
+        SetupAPIWindow(self, self.on_api_keys_saved)
 
     def logout_app(self):
-        if not messagebox.askyesno("Log Out", "Are you sure you want to log out from Telegram? This will delete your local session."):
+        confirm = ModernConfirmDialog(
+            self, title="Log Out", 
+            message="Are you sure you want to log out from Telegram? This will delete your local session.",
+            confirm_text="Log Out",
+            is_danger=True
+        )
+        if not confirm.result:
             return
             
         async def do_logout():
@@ -457,33 +532,59 @@ class LoadHunterApp(ctk.CTk):
         LoginWindow(self, self.backend, on_success=self.on_backend_ready)
 
     def on_closing(self):
-        if not messagebox.askokcancel("Quit", "Do you want to quit?"):
+        # Determine if we're stuck in startup
+        is_startup = hasattr(self, 'splash') and self.splash.winfo_exists()
+        
+        if is_startup:
+            # If stuck at splash, just exit without confirming to avoid hanging
+            logging.info("Exiting during startup splash.")
+            os._exit(0)
+            
+        confirm = ModernConfirmDialog(
+            self, title="Quit LoadHunter", 
+            message="Are you sure you want to exit the application?",
+            confirm_text="Exit Now",
+            cancel_text="Stay"
+        )
+        if not confirm.result:
             return
 
         self.start_btn.configure(state="disabled")
 
         def shutdown():
             try:
-                if self.backend.client and self.backend.client.is_connected():
+                # Close window early to give user immediate feedback
+                self.after(0, self.withdraw)
+                
+                # Only attempt clean disconnect if loop is running and client exists
+                if self.loop.is_running() and self.backend.client and self.backend.client.is_connected():
                     logging.info("Disconnecting Telegram client...")
-                    future = asyncio.run_coroutine_threadsafe(self.backend.disconnect(), self.loop)
-                    # Wait up to 5 seconds for clean disconnect
-                    future.result(timeout=5)
-            except Exception as e:
-                logging.error(f"Error during shutdown disconnect: {e}")
-            finally:
-                logging.info("Stopping event loop...")
-                self.loop.call_soon_threadsafe(self.loop.stop)
+                    try:
+                        future = asyncio.run_coroutine_threadsafe(self.backend.disconnect(), self.loop)
+                        # Wait up to 2 seconds for clean disconnect
+                        future.result(timeout=2)
+                    except Exception as e:
+                        logging.error(f"Error during async disconnect: {e}")
                 
-                # Join the backend thread
+                if self.loop.is_running():
+                    logging.info("Stopping event loop...")
+                    self.loop.call_soon_threadsafe(self.loop.stop)
+                
+                # Join the backend thread if it was started
                 if self.backend._thread and self.backend._thread.is_alive():
-                    self.backend._thread.join(timeout=2)
-                
-                logging.info("Closing application window.")
-                self.after(0, self.destroy)
+                    self.backend._thread.join(timeout=0.5)
+            except Exception as e:
+                logging.error(f"Error during shutdown: {e}")
+            finally:
+                logging.info("Final shutdown via os._exit")
+                # Immediate OS-level exit to prevent lingering processes
+                os._exit(0)
 
-        # Run shutdown in a separate thread to keep UI responsive while waiting for network
+        # Run shutdown in a separate thread to keep UI responsive
         threading.Thread(target=shutdown, daemon=True).start()
+        
+        # Failsafe: if the thread hangs, force kill in 3 seconds anyway
+        self.after(3000, lambda: os._exit(0))
 
 if __name__ == "__main__":
     # Set global error handler for startup

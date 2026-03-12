@@ -39,7 +39,12 @@ def get_bundle_dir() -> str:
 # Data will be stored in the OS-specific user app data folder
 DATA_DIR = get_data_dir()
 BUNDLE_DIR = get_bundle_dir()
-APP_DIR = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else BUNDLE_DIR
+
+# APP_DIR is where the .exe or main.py is located
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = BUNDLE_DIR
 
 # All data (logs, filters, sessions) should live in the OS-specific data dir for persistence
 SESSION_DIR = os.path.join(DATA_DIR, 'sessions')
@@ -52,20 +57,41 @@ ENV_FILE = os.path.join(APP_DIR, '.env')
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(SESSION_DIR, exist_ok=True)
-load_dotenv(ENV_FILE)
+
+# Try to load environment variables from .env file
+if os.path.exists(ENV_FILE):
+    load_dotenv(ENV_FILE)
+else:
+    # Also check the current working directory as a fallback
+    cwd_env = os.path.join(os.getcwd(), '.env')
+    if os.path.exists(cwd_env):
+        load_dotenv(cwd_env)
 
 API_ID = os.getenv('TG_API_ID')
 API_HASH = os.getenv('TG_API_HASH')
 
+def _check_api_keys():
+    global API_ID, API_HASH
+    if not API_ID or not API_HASH:
+        if os.path.exists(CREDENTIALS_FILE):
+            try:
+                with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
+                    creds = json.load(f)
+                    if not API_ID: API_ID = creds.get('TG_API_ID')
+                    if not API_HASH: API_HASH = creds.get('TG_API_HASH')
+            except Exception as e:
+                print(f"Warning: Failed to load credentials from {CREDENTIALS_FILE}: {e}")
+
+_check_api_keys()
+
 if not API_ID or not API_HASH:
-    if os.path.exists(CREDENTIALS_FILE):
-        try:
-            with open(CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
-                creds = json.load(f)
-                API_ID = creds.get('TG_API_ID')
-                API_HASH = creds.get('TG_API_HASH')
-        except Exception:
-            pass
+    # Log the locations searched for debugging
+    with open(ERROR_LOG_FILE, 'a', encoding='utf-8') as f:
+        f.write(f"\n--- API KEYS MISSING {datetime.now()} ---\n")
+        f.write(f"Searched ENV_FILE: {ENV_FILE}\n")
+        f.write(f"Searched CREDENTIALS_FILE: {CREDENTIALS_FILE}\n")
+        f.write(f"CWD: {os.getcwd()}\n")
+        f.write(f"APP_DIR: {APP_DIR}\n")
 
 def save_credentials(api_id, api_hash):
     global API_ID, API_HASH

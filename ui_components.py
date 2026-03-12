@@ -281,7 +281,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
     _TITLE_BASE = "Filter Settings"
 
-    def __init__(self, parent, config: dict, on_save, on_import, on_logout=None):
+    def __init__(self, parent, config: dict, on_save, on_import, on_logout=None, on_api_setup=None):
         super().__init__(parent)
         self.title(self._TITLE_BASE)
         self.geometry("520x780")
@@ -293,6 +293,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._on_save = on_save
         self._on_import = on_import
         self._on_logout = on_logout
+        self._on_api_setup = on_api_setup
         self._dirty = False
         self.entries: dict[str, tuple] = {}
         self._error_labels: dict[str, ctk.CTkLabel] = {}
@@ -476,10 +477,17 @@ class SettingsWindow(ctk.CTkToplevel):
         btn_frame.pack(fill="x", padx=10, pady=(15, 5))
         
         ctk.CTkButton(
-            btn_frame, text="🔄 Check for Updates",
+            btn_frame, text="🔄 Check Updates",
             fg_color=COLORS.get("accent", "#5B8CFF"), hover_color=COLORS.get("accent_hover", "#4A7AEE"),
             command=self._check_updates
         ).pack(side="left", padx=(0, 10))
+
+        if self._on_api_setup:
+            ctk.CTkButton(
+                btn_frame, text="🔑 API Setup",
+                fg_color="#334155", hover_color="#1E293B",
+                command=self._on_api_setup
+            ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
             btn_frame, text="🐛 Report Issue",
@@ -501,7 +509,15 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _check_updates(self):
         import updater
-        updater.check_for_updates(self)
+        import threading
+        
+        def run_check():
+            try:
+                updater.check_for_updates(self)
+            except Exception as e:
+                logging.error(f"Updater error: {e}")
+
+        threading.Thread(target=run_check, daemon=True).start()
 
     def _report_issue(self):
         import updater
@@ -788,8 +804,88 @@ class ErrorLogWindow(ctk.CTkToplevel):
 
 
 # ─────────────────────────────────────────────
-#  FloatingToast
+#  ModernConfirmDialog
 # ─────────────────────────────────────────────
+
+class ModernConfirmDialog(ctk.CTkToplevel):
+    """
+    A beautiful dark-themed confirmation dialog to replace default popups.
+    """
+    def __init__(self, parent, title="Confirmation", message="Are you sure?", 
+                 confirm_text="Confirm", cancel_text="Cancel", is_danger=False):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("380x200")
+        self.configure(fg_color=COLORS["bg_primary"])
+        self.attributes("-topmost", True)
+        self.resizable(False, False)
+        
+        self.result = False
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # Main Container
+        frame = ctk.CTkFrame(self, fg_color="transparent")
+        frame.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
+        
+        # Message
+        ctk.CTkLabel(
+            frame, text=message, 
+            font=ctk.CTkFont(size=15),
+            text_color=COLORS["text_primary"],
+            wraplength=340
+        ).pack(pady=(10, 20))
+
+        # Button Area
+        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_frame.pack(fill="x", side="bottom")
+
+        # Cancel Button
+        ctk.CTkButton(
+            btn_frame, text=cancel_text, 
+            fg_color=COLORS["bg_secondary"],
+            hover_color=COLORS["border"],
+            text_color=COLORS["text_primary"],
+            width=120, height=36,
+            command=self._cancel
+        ).pack(side="left", padx=(0, 10), expand=True)
+
+        # Confirm Button
+        confirm_color = COLORS["danger"] if is_danger else COLORS["accent"]
+        confirm_hover = COLORS["danger_hover"] if is_danger else COLORS["accent_hover"]
+        
+        ctk.CTkButton(
+            btn_frame, text=confirm_text, 
+            fg_color=confirm_color,
+            hover_color=confirm_hover,
+            text_color="#FFFFFF",
+            font=ctk.CTkFont(weight="bold"),
+            width=120, height=36,
+            command=self._confirm
+        ).pack(side="right", expand=True)
+
+        self._center_on_parent(parent)
+        
+        # Grab focus and wait
+        self.grab_set()
+        self.wait_window()
+
+    def _confirm(self):
+        self.result = True
+        self.destroy()
+
+    def _cancel(self):
+        self.result = False
+        self.destroy()
+
+    def _center_on_parent(self, parent):
+        self.update_idletasks()
+        pw = parent.winfo_rootx() + parent.winfo_width() // 2
+        ph = parent.winfo_rooty() + parent.winfo_height() // 2
+        w, h = 380, 200
+        self.geometry(f"{w}x{h}+{pw - w // 2}+{ph - h // 2}")
 
 class FloatingToast(ctk.CTkFrame):
     """
@@ -848,7 +944,6 @@ class SetupAPIWindow(ctk.CTkToplevel):
         
         self.on_save = on_save_callback
         
-        self._build_ui()
         self._center_on_parent(parent)
         
         ctk.CTkLabel(
@@ -857,10 +952,20 @@ class SetupAPIWindow(ctk.CTkToplevel):
             text_color=COLORS["text_primary"]
         ).pack(pady=(20, 10))
         ctk.CTkLabel(
-            self, text="Please enter your Telegram API credentials.\nThese will be saved securely.",
+            self, text="Please enter your Telegram API credentials.\nThese will be saved locally on your computer.",
             font=ctk.CTkFont(size=12), text_color=COLORS["text_muted"],
             justify="center"
         ).pack(pady=5)
+
+        # Help Link
+        help_link = ctk.CTkLabel(
+            self, text="Where do I get my API ID and Hash?",
+            font=ctk.CTkFont(size=11, underline=True),
+            text_color=COLORS["accent"],
+            cursor="hand2"
+        )
+        help_link.pack(pady=(0, 10))
+        help_link.bind("<Button-1>", lambda e: webbrowser.open("https://my.telegram.org/auth?to=apps"))
         
         frame = ctk.CTkFrame(self, fg_color="transparent")
         frame.pack(fill="x", padx=30, pady=20)
@@ -902,8 +1007,8 @@ class SetupAPIWindow(ctk.CTkToplevel):
         
     def _on_close(self):
         if messagebox.askyesno("Exit", "You must provide API credentials to use the app. Quit?"):
-            import sys
-            sys.exit(0)
+            import os
+            os._exit(0)
             
     def _center_on_parent(self, parent):
         self.update_idletasks()
@@ -1087,10 +1192,9 @@ class LoginWindow(ctk.CTkToplevel):
         future.add_done_callback(lambda f: self.after(0, on_sign_in, f))
 
     def _on_close(self):
-        import sys
-        from tkinter import messagebox
         if messagebox.askyesno("Exit", "Cancel login and close application?", parent=self):
-            sys.exit(0)
+            import os
+            os._exit(0)
 
     def _center_on_parent(self, parent):
         self.update_idletasks()

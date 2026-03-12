@@ -61,7 +61,7 @@ jobs:
           Priority: optional
           Architecture: amd64
           Maintainer: LoadHunter Developer <noreply@github.com>
-          Depends: python3-tk, xclip, xsel
+          Depends: python3-tk, xclip, xsel, libcanberra-gtk-module
           Description: LoadHunter - Modular Logistics Filter and Forwarder for Telegram.
           EOF
           dpkg-deb --build package loadhunter_${VERSION}_amd64.deb

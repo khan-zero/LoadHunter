@@ -24,24 +24,41 @@ class LoadHunterBackend:
         self._loop_ready = threading.Event()
 
     def start(self, filter_engine):
-        if self._starting or (self.client and self.client.is_connected()):
-            logging.warning("Backend already starting or connected.")
+        if self._starting:
+            logging.warning("Backend already starting.")
+            return
+            
+        if self.client and self.client.is_connected():
+            logging.info("Backend already connected. Ready.")
+            if self.on_ready: self.on_ready()
             return
 
         self._starting = True
         self.filter_engine = filter_engine
+        
+        # Ensure loop is running
         if not self._thread or not self._thread.is_alive():
             self._thread = threading.Thread(target=self._run_event_loop, daemon=True)
             self._thread.start()
         
-        # Wait for the loop to be running before scheduling
+        # Schedule initialization on the event loop
         def schedule_init():
-            self._loop_ready.wait(timeout=5)
+            is_ready = self._loop_ready.wait(timeout=10)
+            if not is_ready:
+                logging.error("Timed out waiting for asyncio loop to be ready.")
+                self._starting = False
+                self.on_error("LOOP_TIMEOUT")
+                return
+
             if self.loop.is_running():
+                # Clear existing client if somehow it exists but not connected
+                if self.client and not self.client.is_connected():
+                    self.client = None
                 asyncio.run_coroutine_threadsafe(self._init_client(), self.loop)
             else:
                 self._starting = False
                 logging.error("Asyncio loop failed to start in time.")
+                self.on_error("LOOP_NOT_RUNNING")
 
         threading.Thread(target=schedule_init, daemon=True).start()
 
@@ -70,16 +87,30 @@ class LoadHunterBackend:
 
     async def _init_client(self):
         session_path = os.path.join(SESSION_DIR, 'loadhunter_session')
+        
+        if not API_ID or not API_HASH:
+            logging.error("CRITICAL: API_ID or API_HASH is missing in backend. Cannot connect.")
+            self._starting = False
+            self.on_error("CREDENTIALS_MISSING")
+            return
+
         # Use a more robust connection policy
-        self.client = TelegramClient(session_path, int(API_ID), API_HASH, connection_retries=10, retry_delay=2)
+        try:
+            self.client = TelegramClient(session_path, int(API_ID), API_HASH, connection_retries=5, retry_delay=3)
+        except Exception as e:
+            logging.error(f"Failed to initialize TelegramClient: {e}")
+            self._starting = False
+            self.on_error("CLIENT_INIT_FAILED")
+            return
         
         try:
             logging.info("Connecting to Telegram...")
             # Use a timeout for the initial connection
-            await asyncio.wait_for(self.client.connect(), timeout=30)
+            await asyncio.wait_for(self.client.connect(), timeout=25)
             
             if not await self.client.is_user_authorized():
                 self._starting = False
+                logging.info("User NOT authorized. Requesting login...")
                 self.on_error("AUTH_REQUIRED")
                 return
 
@@ -111,17 +142,20 @@ class LoadHunterBackend:
                     except Exception:
                         return # Skip if we can't resolve sender
                     
-                    # Check cache first for common groups
-                    if sender.id in self.common_chats_cache:
-                        common_count = self.common_chats_cache[sender.id]
-                    else:
-                        try:
-                            # Robustly call GetCommonChatsRequest
-                            common = await self.client(GetCommonChatsRequest(user_id=sender, max_id=0, limit=100))
-                            common_count = len(common.chats)
-                            self.common_chats_cache[sender.id] = common_count
-                        except Exception:
-                            common_count = 0
+                    # Check cache first for common groups - only for users
+                    common_count = 0
+                    from telethon.tl.types import User
+                    if isinstance(sender, User):
+                        if sender.id in self.common_chats_cache:
+                            common_count = self.common_chats_cache[sender.id]
+                        else:
+                            try:
+                                # Robustly call GetCommonChatsRequest
+                                common = await self.client(GetCommonChatsRequest(user_id=sender, max_id=0, limit=100))
+                                common_count = len(common.chats)
+                                self.common_chats_cache[sender.id] = common_count
+                            except Exception:
+                                common_count = 0
                     
                     reason = self.filter_engine.is_spam(event.text, sender, common_count, media=event.media)
                     
@@ -183,14 +217,27 @@ class LoadHunterBackend:
             try:
                 if not self.client.is_connected():
                     await self.client.connect()
+                
                 await self.client.log_out()
                 logging.info("Logged out from Telegram.")
                 
-                # Delete session file
-                session_path = os.path.join(SESSION_DIR, 'loadhunter_session.session')
+                # Disconnect after logout
+                await self.client.disconnect()
+                self.client = None
+                
+                # Delete session file(s)
+                # Telethon session files usually end in .session
+                session_base = os.path.join(SESSION_DIR, 'loadhunter_session')
+                session_path = session_base + '.session'
                 if os.path.exists(session_path):
                     os.remove(session_path)
                     logging.info(f"Session file deleted: {session_path}")
+                
+                # Also check for .session-journal
+                journal_path = session_path + '-journal'
+                if os.path.exists(journal_path):
+                    os.remove(journal_path)
+                
                 return True
             except Exception as e:
                 logging.error(f"Error during logout: {e}")
