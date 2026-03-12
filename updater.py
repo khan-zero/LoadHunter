@@ -9,7 +9,7 @@ import sys
 import logging
 
 # Change this to your actual current version
-CURRENT_VERSION = "v1.0.19"
+CURRENT_VERSION = "v1.0.20"
 GITHUB_REPO = "khan-zero/LoadHunter" 
 
 def get_latest_release():
