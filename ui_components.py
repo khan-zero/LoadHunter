@@ -680,11 +680,13 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _on_close_request(self):
         if self._dirty:
-            if not messagebox.askyesno(
-                "Unsaved Changes",
-                "You have unsaved changes.\nClose without saving?",
-                parent=self,
-            ):
+            confirm = ModernConfirmDialog(
+                self, title="Unsaved Changes", 
+                message="You have unsaved changes. Are you sure you want to close without saving?",
+                confirm_text="Discard & Close",
+                is_danger=True
+            )
+            if not confirm.result:
                 return
         self.destroy()
 
@@ -935,60 +937,70 @@ class SetupAPIWindow(ctk.CTkToplevel):
     def __init__(self, parent, on_save_callback):
         super().__init__(parent)
         self.title("API Key Setup")
-        self.geometry("400x350")
+        self.geometry("420x520")
         self.configure(fg_color=COLORS["bg_primary"])
         self.attributes("-topmost", True)
         self.resizable(False, False)
         
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        
         self.on_save = on_save_callback
         
-        self._center_on_parent(parent)
+        # Main container with padding
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(
+            container, text="Welcome to LoadHunter!", 
+            font=ctk.CTkFont(size=22, weight="bold"),
+            text_color=COLORS["text_primary"]
+        ).pack(pady=(10, 5))
         
         ctk.CTkLabel(
-            self, text="Welcome to LoadHunter!", 
-            font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=COLORS["text_primary"]
-        ).pack(pady=(20, 10))
-        ctk.CTkLabel(
-            self, text="Please enter your Telegram API credentials.\nThese will be saved locally on your computer.",
+            container, text="Please enter your Telegram API credentials.\nThese will be saved locally on your computer.",
             font=ctk.CTkFont(size=12), text_color=COLORS["text_muted"],
             justify="center"
         ).pack(pady=5)
 
         # Help Link
         help_link = ctk.CTkLabel(
-            self, text="Where do I get my API ID and Hash?",
-            font=ctk.CTkFont(size=11, underline=True),
+            container, text="Where do I get my API ID and Hash?",
+            font=ctk.CTkFont(size=12, underline=True),
             text_color=COLORS["accent"],
             cursor="hand2"
         )
-        help_link.pack(pady=(0, 10))
+        help_link.pack(pady=(0, 15))
         help_link.bind("<Button-1>", lambda e: webbrowser.open("https://my.telegram.org/auth?to=apps"))
         
-        frame = ctk.CTkFrame(self, fg_color="transparent")
-        frame.pack(fill="x", padx=30, pady=20)
+        # Form area
+        form = ctk.CTkFrame(container, fg_color=COLORS["bg_secondary"], corner_radius=12, border_width=1, border_color=COLORS["border"])
+        form.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="API ID:", anchor="w").pack(fill="x")
-        self.api_id_entry = ctk.CTkEntry(frame, placeholder_text="e.g. 1234567")
-        self.api_id_entry.pack(fill="x", pady=(2, 10))
+        inner_form = ctk.CTkFrame(form, fg_color="transparent")
+        inner_form.pack(padx=20, pady=20, fill="both")
+
+        ctk.CTkLabel(inner_form, text="API ID", font=ctk.CTkFont(size=13, weight="bold"), anchor="w").pack(fill="x")
+        self.api_id_entry = ctk.CTkEntry(inner_form, placeholder_text="e.g. 1234567", height=40, fg_color=COLORS["bg_primary"])
+        self.api_id_entry.pack(fill="x", pady=(5, 15))
         
-        ctk.CTkLabel(frame, text="API Hash:", anchor="w").pack(fill="x")
-        self.api_hash_entry = ctk.CTkEntry(frame, placeholder_text="e.g. abc123def456...")
-        self.api_hash_entry.pack(fill="x", pady=(2, 10))
+        ctk.CTkLabel(inner_form, text="API Hash", font=ctk.CTkFont(size=13, weight="bold"), anchor="w").pack(fill="x")
+        self.api_hash_entry = ctk.CTkEntry(inner_form, placeholder_text="e.g. abc123def456...", height=40, fg_color=COLORS["bg_primary"])
+        self.api_hash_entry.pack(fill="x", pady=(5, 5))
         
-        self.error_label = ctk.CTkLabel(self, text="", text_color=COLORS["danger"], font=ctk.CTkFont(size=11))
-        self.error_label.pack()
+        self.error_label = ctk.CTkLabel(inner_form, text="", text_color=COLORS["danger"], font=ctk.CTkFont(size=12))
+        self.error_label.pack(pady=5)
         
-        ctk.CTkButton(
-            self, text="Save Credentials", 
+        self.save_btn = ctk.CTkButton(
+            container, text="Save & Connect", 
             fg_color=COLORS["success"],
             hover_color=COLORS["success_hover"],
-            font=ctk.CTkFont(weight="bold"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            height=44,
             corner_radius=8,
             command=self._save
-        ).pack(pady=15)
+        )
+        self.save_btn.pack(fill="x", padx=10, pady=(10, 0))
+        
+        self._center_on_parent(parent)
         
     def _save(self):
         api_id = self.api_id_entry.get().strip()
@@ -1006,7 +1018,12 @@ class SetupAPIWindow(ctk.CTkToplevel):
         self.destroy()
         
     def _on_close(self):
-        if messagebox.askyesno("Exit", "You must provide API credentials to use the app. Quit?"):
+        confirm = ModernConfirmDialog(
+            self, title="Exit", 
+            message="You must provide API credentials to use the app. Quit LoadHunter?",
+            confirm_text="Quit", is_danger=True
+        )
+        if confirm.result:
             import os
             os._exit(0)
             
@@ -1014,7 +1031,7 @@ class SetupAPIWindow(ctk.CTkToplevel):
         self.update_idletasks()
         pw = parent.winfo_rootx() + parent.winfo_width() // 2
         ph = parent.winfo_rooty() + parent.winfo_height() // 2
-        w, h = 400, 350
+        w, h = 420, 520
         self.geometry(f"{w}x{h}+{pw - w // 2}+{ph - h // 2}")
 
 
@@ -1192,7 +1209,12 @@ class LoginWindow(ctk.CTkToplevel):
         future.add_done_callback(lambda f: self.after(0, on_sign_in, f))
 
     def _on_close(self):
-        if messagebox.askyesno("Exit", "Cancel login and close application?", parent=self):
+        confirm = ModernConfirmDialog(
+            self, title="Cancel Login", 
+            message="Are you sure you want to cancel the login process and close the app?",
+            confirm_text="Quit App", is_danger=True
+        )
+        if confirm.result:
             import os
             os._exit(0)
 
