@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import platform
 from pathlib import Path
 
+APP_VERSION = "v1.0.21"
+
 def get_data_dir() -> str:
     """Returns an OS-specific, safe directory for application data."""
     system = platform.system()

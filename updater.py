@@ -7,10 +7,12 @@ import platform
 import os
 import sys
 import logging
+import config
 
-# Change this to your actual current version
-CURRENT_VERSION = "v1.0.20"
+# The version is now centralized in config.py
+CURRENT_VERSION = config.APP_VERSION
 GITHUB_REPO = "khan-zero/LoadHunter" 
+
 
 def get_latest_release():
     """Fetches the latest release from a GitHub repository."""
