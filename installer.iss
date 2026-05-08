@@ -1,6 +1,6 @@
 [Setup]
 AppName=LoadHunter
-AppVersion=1.0.21
+AppVersion=1.1.0
 DefaultDirName={pf}\LoadHunter
 DefaultGroupName=LoadHunter
 OutputDir=.

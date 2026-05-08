@@ -1,5 +1,7 @@
 import re
 import logging
+import hashlib
+import time
 from telethon.tl.types import MessageMediaDocument, DocumentAttributeSticker, MessageMediaWebPage, MessageMediaPhoto
 
 class FilterEngine:
@@ -9,8 +11,8 @@ class FilterEngine:
         self.config = config if isinstance(config, dict) else DEFAULT_FILTERS
         self._compile_regex()
         
-        # Uzbek common stop-words from FILTER_RULES.md
-        self.uz_stop_words = ["yuk bor", "mashina kerak", "aka", "fura", "ref", "yuk", "bor", "kerak", "nechi", "tonna"]
+        # Memory for duplicate detection: {hash: timestamp}
+        self.seen_leads = {}
         
     def _compile_regex(self):
         """Pre-compiles all regex patterns to optimize the processing loop."""
@@ -28,8 +30,8 @@ class FilterEngine:
             # 3. Visual Noise (Emojis/Symbols)
             self.emoji_regex = re.compile(r'[\U0001F000-\U0001FAFF]|[\u2700-\u27BF]|[\u2600-\u26FF]')
             
-            # 4. Uzbek Special Characters
-            self.uz_specials_regex = re.compile(r'[ўқғҳЎҚҒҲ]')
+            # 4. Uzbek Special Characters (Cyrillic + Latin marks)
+            self.uz_specials_regex = re.compile(r"[ўқғҳЎҚҒҲ]|[oO]'|[gG]'|[sS][hH]|[cC][hH]")
             
         except re.error as e:
             logging.error(f"Regex compilation error: {e}. Falling back to defaults.")
@@ -37,45 +39,50 @@ class FilterEngine:
             self.fem_endings = re.compile(r'.*(ova|eva|ова|ева|а|я|ия|iya|ia|xon|хон|bibi|биби)$', re.IGNORECASE)
             self.link_regex = re.compile(r'(https?://|t\.me/)', re.IGNORECASE)
             self.emoji_regex = re.compile(r'[\U0001F000-\U0001FAFF]|[\u2700-\u27BF]|[\u2600-\u26FF]')
-            self.uz_specials_regex = re.compile(r'[ўқғҳЎҚҒҲ]')
+            self.uz_specials_regex = re.compile(r"[ўқғҳЎҚҒҲ]|[oO]'|[gG]'|[sS][hH]|[cC][hH]")
 
-    def is_spam(self, text, sender, common_chats_count, media=None):
+    def _get_content_hash(self, text):
+        """Generates a normalized hash of the text content."""
+        # Normalize: lower, strip whitespace, remove emojis/punctuation
+        normalized = re.sub(r'[^\w\s]', '', text.lower())
+        normalized = "".join(normalized.split()) # Remove all whitespace
+        return hashlib.md5(normalized.encode('utf-8')).hexdigest()
+
+    def is_spam_fast(self, text, sender, media=None):
         """
-        Main filtering logic. Returns a string reason if spam, or None if it's a valid lead.
+        Cheap filtering logic that doesn't require extra API calls.
+        Returns a string reason if spam, or None to continue.
         """
         try:
-            if self.config is None:
-                from config import DEFAULT_FILTERS
-                self.config = DEFAULT_FILTERS
+            # --- LAYER 0: Whitelist & Blacklist ---
+            if sender:
+                user_id = str(sender.id)
+                username = (getattr(sender, 'username', '') or '').lower()
+                
+                if user_id in self.config.get('whitelist_users', []) or \
+                   (username and f"@{username}" in self.config.get('whitelist_users', [])):
+                    return "WHITELISTED" # Special return to skip all other filters
 
-            # --- LAYER A: Entity & Social Metadata ---
-            # 1. IMMEDIATE BOT SKIP
+                if user_id in self.config.get('blacklist_users', []) or \
+                   (username and f"@{username}" in self.config.get('blacklist_users', [])):
+                    return "Blacklisted User"
+
+            # --- LAYER A: Entity Metadata ---
             if sender:
                 if getattr(sender, 'bot', False):
                     return "Entity: Bot"
                 
-                username = getattr(sender, 'username', '') or ''
-                if 'bot' in username.lower():
+                if 'bot' in (getattr(sender, 'username', '') or '').lower():
                     return "Username: Bot"
 
-            # 2. Shared Group Constraint
-            max_common = self.config.get('max_common_groups', 2)
-            if common_chats_count == 0: 
-                return "External: 0 Common Groups"
-            if common_chats_count > max_common: 
-                return f"Professional: {common_chats_count} Groups"
-
             # --- LAYER B: Visual & Structural Analysis ---
-            # 3. Media Blacklist (Images, Stickers, GIFs)
             if media:
                 if isinstance(media, MessageMediaPhoto):
                     return "Media: Image"
                 if isinstance(media, MessageMediaDocument):
-                    # Check for stickers
                     if hasattr(media, 'document') and hasattr(media.document, 'attributes'):
                         if any(isinstance(attr, DocumentAttributeSticker) for attr in media.document.attributes):
                             return "Media: Sticker"
-                        # Check for GIFs (usually mp4 with animated attribute)
                         if media.document.mime_type == 'video/mp4' and any(getattr(attr, 'animated', False) for attr in media.document.attributes):
                             return "Media: GIF"
 
@@ -85,11 +92,26 @@ class FilterEngine:
                 
             text_lower = text_content.lower()
 
-            # 4. Link Blacklist (http, https, t.me)
+            # --- LAYER C: Duplicate Detection ---
+            content_hash = self._get_content_hash(text_content)
+            now = time.time()
+            timeout = self.config.get('duplicate_timeout', 600)
+            
+            # Prune old entries occasionally
+            if len(self.seen_leads) > 1000:
+                self.seen_leads = {h: t for h, t in self.seen_leads.items() if now - t < timeout}
+
+            if content_hash in self.seen_leads:
+                if now - self.seen_leads[content_hash] < timeout:
+                    return "Duplicate: Recently Seen"
+            
+            self.seen_leads[content_hash] = now
+
+            # Link Blacklist
             if self.link_regex.search(text_lower):
                 return "Link: Blacklisted URL"
 
-            # 5. Blacklist & Bot Keywords
+            # Blacklist & Bot Keywords
             blacklist = self.config.get('blacklist_keywords', [])
             bot_keywords = self.config.get('bot_service_keywords', [])
             combined_blacklist = (blacklist if isinstance(blacklist, list) else []) + \
@@ -99,7 +121,7 @@ class FilterEngine:
                 if str(kw).lower() in text_lower: 
                     return f"Keyword: {kw}"
 
-            # 6. Template Detection
+            # Template Detection
             max_lines = self.config.get('max_line_breaks', 5)
             line_count = text_content.count('\n')
             if line_count > max_lines: 
@@ -108,8 +130,19 @@ class FilterEngine:
             if self.emoji_regex.search(text_content): 
                 return "Marketing: Contains Emoji"
 
-            # --- LAYER C: Language & Content Validation ---
-            # 7. Feminine Name (Optional)
+            # --- LAYER D: Route Filtering (New) ---
+            target_routes = self.config.get('target_routes', [])
+            if target_routes:
+                # If target routes are set, the message MUST contain at least one of them
+                route_found = False
+                for route in target_routes:
+                    if str(route).lower() in text_lower:
+                        route_found = True
+                        break
+                if not route_found:
+                    return "Route: Not in target locations"
+
+            # Feminine Name
             if self.config.get('check_feminine', True) and sender:
                 first_name = getattr(sender, 'first_name', '') or ''
                 last_name = getattr(sender, 'last_name', '') or ''
@@ -117,25 +150,21 @@ class FilterEngine:
                 if name and self.fem_endings.match(name): 
                     return "Feminine Name"
 
-            # 8. The Uzbek Guard
+            # Uzbek Guard
+            uz_stop_words = self.config.get('uz_stop_words', [])
+            if any(sw in text_lower for sw in uz_stop_words):
+                return None # Valid Uzbek logistics lead (Passed Fast)
+            
             min_uz_val = self.config.get('min_uz_char_percentage', 0.3)
-            # Normalize: if > 1, assume it's a percentage (30 instead of 0.3)
             try:
                 min_uz_threshold = float(min_uz_val)
-                if min_uz_threshold > 1:
-                    min_uz_threshold = min_uz_threshold / 100
-            except (ValueError, TypeError):
-                min_uz_threshold = 0.3
+                if min_uz_threshold > 1: min_uz_threshold /= 100
+            except: min_uz_threshold = 0.3
             
             if min_uz_threshold > 0:
-                # Check for stop-words first (Fast pass)
-                if any(sw in text_lower for sw in self.uz_stop_words):
-                    return None # Valid Uzbek logistics lead
-                
-                # Calculate Uzbek-specific character percentage
                 trimmed_text = text_content.strip()
                 total_chars = len(trimmed_text)
-                if total_chars > 20: # Only apply ratio to substantive messages
+                if total_chars > 20:
                     uz_specials = self.uz_specials_regex.findall(trimmed_text)
                     uz_ratio = len(uz_specials) / total_chars
                     if uz_ratio < min_uz_threshold:
@@ -143,5 +172,23 @@ class FilterEngine:
 
             return None
         except Exception as e:
-            logging.error(f"Error in FilterEngine.is_spam: {e}", exc_info=True)
-            return None # Fail open
+            logging.error(f"Error in FilterEngine.is_spam_fast: {e}")
+            return None
+
+    def is_spam_social(self, common_chats_count):
+        """
+        Expensive filtering logic based on social metadata.
+        """
+        max_common = self.config.get('max_common_groups', 2)
+        if common_chats_count == 0: 
+            return "External: 0 Common Groups"
+        if common_chats_count > max_common: 
+            return f"Professional: {common_chats_count} Groups"
+        return None
+
+    def is_spam(self, text, sender, common_chats_count, media=None):
+        """Compatibility layer for old calls."""
+        fast_reason = self.is_spam_fast(text, sender, media)
+        if fast_reason == "WHITELISTED": return None
+        if fast_reason: return fast_reason
+        return self.is_spam_social(common_chats_count)

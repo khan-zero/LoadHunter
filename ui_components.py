@@ -61,8 +61,11 @@ class LeadFrame(ctk.CTkFrame):
         tg_link: str,
         chat_id: int,
         message_id: int,
+        sender_id: int,
         on_open_callback,
         on_forward_callback,
+        on_blacklist_callback=None,
+        on_whitelist_callback=None,
         **kwargs,
     ):
         self._NORMAL_COLOR = COLORS["bg_card"]
@@ -78,10 +81,14 @@ class LeadFrame(ctk.CTkFrame):
 
         self.on_open = on_open_callback
         self.on_forward = on_forward_callback
+        self.on_blacklist = on_blacklist_callback
+        self.on_whitelist = on_whitelist_callback
+        
         self.tg_link = tg_link
         self.text_content = text_snippet or ""
         self.chat_id = chat_id
         self.message_id = message_id
+        self.sender_id = sender_id
 
         self.grid_columnconfigure(0, weight=1)
         self._build(sender_name, common_groups, text_snippet)
@@ -106,17 +113,41 @@ class LeadFrame(ctk.CTkFrame):
         )
         name_lbl.grid(row=0, column=0, sticky="w")
 
+        # Action buttons in header (Whitelist / Blacklist)
+        btn_container = ctk.CTkFrame(header, fg_color="transparent")
+        btn_container.grid(row=0, column=1, sticky="e")
+        
+        trust_btn = ctk.CTkButton(
+            btn_container, text="Trust", width=50, height=22, 
+            fg_color="transparent", text_color=COLORS["success"],
+            hover_color="#1E2E1E", border_width=1, border_color=COLORS["success"],
+            font=ctk.CTkFont(size=10, weight="bold"),
+            command=self._handle_whitelist
+        )
+        trust_btn.pack(side="left", padx=2)
+        
+        block_btn = ctk.CTkButton(
+            btn_container, text="Block", width=50, height=22, 
+            fg_color="transparent", text_color=COLORS["danger"],
+            hover_color="#2E1E1E", border_width=1, border_color=COLORS["danger"],
+            font=ctk.CTkFont(size=10, weight="bold"),
+            command=self._handle_blacklist
+        )
+        block_btn.pack(side="left", padx=2)
+
         # Coloured pill for common-groups count
-        pill_color = self._groups_pill_color(common_groups)
+        pill_text = f"  👥 {common_groups} groups  " if isinstance(common_groups, int) else f"  ✨ {common_groups}  "
+        pill_color = self._groups_pill_color(common_groups) if isinstance(common_groups, int) else COLORS["accent"]
+        
         pill = ctk.CTkLabel(
             header,
-            text=f"  👥 {common_groups} groups  ",
+            text=pill_text,
             font=ctk.CTkFont(size=11, weight="bold"),
             fg_color=pill_color,
             corner_radius=8,
             text_color="#FFFFFF",
         )
-        pill.grid(row=0, column=1, padx=(6, 0))
+        pill.grid(row=0, column=2, padx=(6, 0))
 
         snippet_lbl = ctk.CTkLabel(
             self,
@@ -245,6 +276,17 @@ class LeadFrame(ctk.CTkFrame):
         )
         toast.place(relx=0.5, rely=0.5, anchor="center")
         self.after(1200, toast.destroy)
+
+    def _handle_whitelist(self):
+        if self.on_whitelist:
+            self.on_whitelist(self.sender_id)
+            self._flash_feedback("Trusted ✓")
+
+    def _handle_blacklist(self):
+        if self.on_blacklist:
+            self.on_blacklist(self.sender_id)
+            self._flash_feedback("Blocked ✗")
+            self.destroy() # Remove from UI immediately
 
     def _handle_open(self):
         if self.tg_link:
@@ -400,6 +442,25 @@ class SettingsWindow(ctk.CTkToplevel):
         self._add_field(scroll, "Bot / Service Keywords", "bot_service_keywords",
                         height=80, is_textbox=True, is_list=True,
                         hint="Comma-separated")
+
+        self._add_field(scroll, "Uzbek Stop-Words", "uz_stop_words",
+                        height=80, is_textbox=True, is_list=True,
+                        hint="Common Uzbek logistics terms (latin or cyrillic)")
+
+        self._add_field(scroll, "Target Routes (Cities)", "target_routes",
+                        height=80, is_textbox=True, is_list=True,
+                        hint="Only show loads matching these cities (leave empty for ALL)")
+
+        self._add_field(scroll, "Duplicate Timeout (sec)", "duplicate_timeout",
+                        hint="Hide same loads for X seconds. Default: 600")
+
+        self._add_field(scroll, "Whitelisted Users (ID/@user)", "whitelist_users",
+                        height=60, is_textbox=True, is_list=True,
+                        hint="Always passed. Comma-separated.")
+
+        self._add_field(scroll, "Blacklisted Users (ID/@user)", "blacklist_users",
+                        height=60, is_textbox=True, is_list=True,
+                        hint="Always rejected. Comma-separated.")
 
         self._add_field(scroll, "Max Line Breaks", "max_line_breaks",
                         hint="Integer, e.g. 10")
@@ -654,7 +715,7 @@ class SettingsWindow(ctk.CTkToplevel):
                     errors.append(key)
                     self._error_labels[key].configure(text=f"⚠ Invalid regex: {exc}")
 
-            elif key in {"max_line_breaks", "max_common_groups", "min_uz_char_percentage"}:
+            elif key in {"max_line_breaks", "max_common_groups", "min_uz_char_percentage", "duplicate_timeout"}:
                 try:
                     new_config[key] = float(raw_val) if "." in raw_val else int(raw_val)
                 except ValueError:

@@ -189,10 +189,11 @@ class LoadHunterApp(ctk.CTk):
             # Show setup window centered on the (hidden) main window or screen
             SetupAPIWindow(self, self.on_api_keys_saved)
         else:
-            self.splash_status.configure(text="Connecting to Telegram...")
-            # Set a 45 second timeout for connection - if it doesn't work, let the user know
-            self._startup_timer = self.after(45000, self._handle_startup_timeout)
-            self.backend.start(self.filter_engine)
+            if hasattr(self, 'splash') and self.splash.winfo_exists():
+                self.splash_status.configure(text="Connecting to Telegram...")
+                # Set a 45 second timeout for connection - if it doesn't work, let the user know
+                self._startup_timer = self.after(45000, self._handle_startup_timeout)
+                self.backend.start(self.filter_engine)
 
     def _handle_startup_timeout(self):
         """Called if connection takes too long."""
@@ -206,14 +207,15 @@ class LoadHunterApp(ctk.CTk):
             
     def on_api_keys_saved(self, api_id, api_hash):
         save_credentials(api_id, api_hash)
+        
         # Restore splash screen if it was destroyed during setup window
         if not hasattr(self, 'splash') or not self.splash.winfo_exists():
             self.show_splash_screen()
         else:
+            # Prevent triggering another check_api_keys if show_splash_screen was just called
             self.splash_progress.start()
             self.splash_status.configure(text="Connecting to Telegram...")
-        
-        self.backend.start(self.filter_engine)
+            self.backend.start(self.filter_engine)
 
     def on_backend_ready(self):
         """Called by backend when Telegram is fully connected and authorized."""
@@ -244,26 +246,42 @@ class LoadHunterApp(ctk.CTk):
         self.main_panel.grid_columnconfigure(0, weight=1)
         self.main_panel.grid_rowconfigure(1, weight=1)
 
-        self.toolbar = ctk.CTkFrame(self.main_panel, fg_color=COLORS["bg_secondary"], height=50)
+        self.toolbar = ctk.CTkFrame(self.main_panel, fg_color=COLORS["bg_secondary"], height=60, corner_radius=12)
         self.toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        self.toolbar.pack_propagate(False) # Keep fixed height
         
-        self.start_btn = ctk.CTkButton(self.toolbar, text="▶ Start Listening", fg_color=COLORS["success"], command=self.toggle_listening)
-        self.start_btn.pack(side="left", padx=10, pady=10)
+        self.start_btn = ctk.CTkButton(
+            self.toolbar, text="▶ Start Listening", 
+            fg_color=COLORS["success"], hover_color=COLORS["success_hover"],
+            font=ctk.CTkFont(weight="bold"),
+            command=self.toggle_listening
+        )
+        self.start_btn.pack(side="left", padx=15, pady=12)
         
-        ctk.CTkButton(self.toolbar, text="Clear All", width=80, fg_color=COLORS["danger"], command=self.clear_leads).pack(side="left", padx=5)
-        ctk.CTkButton(self.toolbar, text="⚙ Settings", width=80, command=self.open_settings).pack(side="right", padx=10)
+        ctk.CTkButton(
+            self.toolbar, text="Clear All", width=90, 
+            fg_color="transparent", border_width=1, border_color=COLORS["danger"],
+            text_color=COLORS["danger"], hover_color="#3D2020",
+            command=self.clear_leads
+        ).pack(side="left", padx=5, pady=12)
+        
+        ctk.CTkButton(
+            self.toolbar, text="⚙ Settings", width=100,
+            fg_color=COLORS["bg_card"], hover_color=COLORS["border"],
+            command=self.open_settings
+        ).pack(side="right", padx=15, pady=12)
 
         self.leads_list = ctk.CTkScrollableFrame(self.main_panel, label_text="Clean Logistics Leads", fg_color=COLORS["bg_secondary"])
         self.leads_list.grid(row=1, column=0, sticky="nsew")
         self.leads_list.grid_columnconfigure(0, weight=1)
 
         # --- Side Panel ---
-        self.side_panel = ctk.CTkFrame(self, fg_color=COLORS["bg_secondary"], width=250)
+        self.side_panel = ctk.CTkFrame(self, fg_color=COLORS["bg_secondary"], width=280, corner_radius=12)
         self.side_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 10), pady=10)
         self.side_panel.grid_propagate(False)
 
-        ctk.CTkLabel(self.side_panel, text="STATUS PANEL", font=ctk.CTkFont(weight="bold")).pack(pady=15)
-        self.count_label = ctk.CTkLabel(self.side_panel, text="Total Caught: 0", font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS["success"])
+        ctk.CTkLabel(self.side_panel, text="STATUS PANEL", font=ctk.CTkFont(size=13, weight="bold"), text_color=COLORS["accent"]).pack(pady=(20, 10))
+        self.count_label = ctk.CTkLabel(self.side_panel, text="Total Caught: 0", font=ctk.CTkFont(size=18, weight="bold"), text_color=COLORS["success"])
         self.count_label.pack(pady=10)
 
         # Tabview for side panel utilities
@@ -343,7 +361,17 @@ class LoadHunterApp(ctk.CTk):
         """Adds or removes the FileHandler based on config."""
         root_logger = logging.getLogger()
         
-        # Handle File Logging
+        # 1. Persistent Error Logging (Always enabled for ERROR/CRITICAL)
+        if not hasattr(self, '_error_handler') or not self._error_handler:
+            try:
+                self._error_handler = logging.FileHandler(ERROR_LOG_FILE, encoding='utf-8')
+                self._error_handler.setLevel(logging.ERROR)
+                self._error_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+                root_logger.addHandler(self._error_handler)
+            except Exception as e:
+                print(f"Failed to setup error logging: {e}")
+        
+        # 2. General File Logging (Configurable)
         should_save = self.app_config.get("save_critical_logs", True)
         if should_save and not self._file_handler:
             try:
@@ -410,19 +438,37 @@ class LoadHunterApp(ctk.CTk):
             logging.info("Listening process stopped.")
             self.update_status_indicator("Idle", COLORS["text_muted"])
 
-    def on_lead_received(self, name, common, text, link, chat_id, message_id):
-        self.after(0, lambda: self._add_lead_ui(name, common, text, link, chat_id, message_id))
+    def on_lead_received(self, name, common, text, link, chat_id, message_id, sender_id):
+        self.after(0, lambda: self._add_lead_ui(name, common, text, link, chat_id, message_id, sender_id))
 
-    def _add_lead_ui(self, name, common, text, link, chat_id, message_id):
+    def _add_lead_ui(self, name, common, text, link, chat_id, message_id, sender_id):
         self.lead_count += 1
         self.count_label.configure(text=f"Total Caught: {self.lead_count}")
         card = LeadFrame(
-            self.leads_list, name, common, text, link, chat_id, message_id,
+            self.leads_list, name, common, text, link, chat_id, message_id, sender_id,
             on_open_callback=log_successful_lead,
-            on_forward_callback=self.forward_lead_ui
+            on_forward_callback=self.forward_lead_ui,
+            on_blacklist_callback=self.blacklist_user,
+            on_whitelist_callback=self.whitelist_user
         )
         card.grid(row=self.lead_count, column=0, padx=5, pady=5, sticky="ew")
         self.leads.append(card)
+
+    def blacklist_user(self, sender_id):
+        sid = str(sender_id)
+        if sid not in self.app_config["blacklist_users"]:
+            self.app_config["blacklist_users"].append(sid)
+            save_filters(self.app_config)
+            self.show_toast(f"User {sid} blacklisted", "warning")
+            logging.info(f"User {sid} added to blacklist.")
+
+    def whitelist_user(self, sender_id):
+        sid = str(sender_id)
+        if sid not in self.app_config["whitelist_users"]:
+            self.app_config["whitelist_users"].append(sid)
+            save_filters(self.app_config)
+            self.show_toast(f"User {sid} whitelisted", "success")
+            logging.info(f"User {sid} added to whitelist.")
 
     def forward_lead_ui(self, chat_id, message_id):
         destinations = self.app_config.get("forward_destinations", ["me"])
@@ -452,12 +498,21 @@ class LoadHunterApp(ctk.CTk):
         if hasattr(self, '_startup_timer'):
             self.after_cancel(self._startup_timer)
             
+        def safe_destroy_splash():
+            if hasattr(self, 'splash') and self.splash.winfo_exists():
+                try:
+                    self.splash.destroy()
+                except:
+                    pass
+
+        # Use a slight delay for destruction to avoid TclErrors from pending resize/draw events
         if hasattr(self, 'splash') and self.splash.winfo_exists():
-            self.splash.destroy() # Ensure splash is gone if we hit an error
+            self.splash.withdraw() 
+            self.after(200, safe_destroy_splash)
 
         if error_code == "AUTH_REQUIRED":
             self.withdraw() # Ensure main window stays hidden during login
-            self.after(0, self.request_login)
+            self.after(300, self.request_login)
         elif error_code in ["CONNECTION_FAILED", "INIT_FAILED", "LOOP_TIMEOUT", "CREDENTIALS_MISSING"]:
             self.deiconify()
             logging.error(f"Critical Backend Error: {error_code}")
@@ -536,55 +591,47 @@ class LoadHunterApp(ctk.CTk):
         is_startup = hasattr(self, 'splash') and self.splash.winfo_exists()
         
         if is_startup:
-            # If stuck at splash, just exit without confirming to avoid hanging
             logging.info("Exiting during startup splash.")
             os._exit(0)
             
-        confirm = ModernConfirmDialog(
-            self, title="Quit LoadHunter", 
-            message="Are you sure you want to exit the application?",
-            confirm_text="Exit Now",
-            cancel_text="Stay"
-        )
-        if not confirm.result:
+        if not messagebox.askyesno("Quit LoadHunter", "Are you sure you want to exit?"):
             return
 
-        self.start_btn.configure(state="disabled")
+        # Visual feedback
+        try:
+            self.start_btn.configure(text="Shutting down...", state="disabled")
+            self.update_status_indicator("Closing...", COLORS["danger"])
+        except:
+            pass
 
-        def shutdown():
+        def force_exit():
+            logging.info("Forcing exit...")
+            os._exit(0)
+
+        # Failsafe: force kill in 2 seconds if async cleanup hangs
+        self.after(2000, force_exit)
+
+        def shutdown_logic():
             try:
-                # Close window early to give user immediate feedback
-                self.after(0, self.withdraw)
-                
-                # Only attempt clean disconnect if loop is running and client exists
-                if self.loop.is_running() and self.backend.client and self.backend.client.is_connected():
-                    logging.info("Disconnecting Telegram client...")
-                    try:
+                # Clean disconnect
+                if self.loop.is_running() and self.backend.client:
+                    if self.backend.client.is_connected():
+                        logging.info("Disconnecting Telegram...")
                         future = asyncio.run_coroutine_threadsafe(self.backend.disconnect(), self.loop)
-                        # Wait up to 2 seconds for clean disconnect
-                        future.result(timeout=2)
-                    except Exception as e:
-                        logging.error(f"Error during async disconnect: {e}")
+                        try:
+                            future.result(timeout=1.5)
+                        except:
+                            pass
                 
                 if self.loop.is_running():
-                    logging.info("Stopping event loop...")
                     self.loop.call_soon_threadsafe(self.loop.stop)
                 
-                # Join the backend thread if it was started
-                if self.backend._thread and self.backend._thread.is_alive():
-                    self.backend._thread.join(timeout=0.5)
             except Exception as e:
-                logging.error(f"Error during shutdown: {e}")
+                logging.error(f"Shutdown error: {e}")
             finally:
-                logging.info("Final shutdown via os._exit")
-                # Immediate OS-level exit to prevent lingering processes
                 os._exit(0)
 
-        # Run shutdown in a separate thread to keep UI responsive
-        threading.Thread(target=shutdown, daemon=True).start()
-        
-        # Failsafe: if the thread hangs, force kill in 3 seconds anyway
-        self.after(3000, lambda: os._exit(0))
+        threading.Thread(target=shutdown_logic, daemon=True).start()
 
 if __name__ == "__main__":
     # Set global error handler for startup

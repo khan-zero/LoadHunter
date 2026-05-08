@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import platform
 from pathlib import Path
 
-APP_VERSION = "v1.0.21"
+APP_VERSION = "v1.1.0"
 
 def get_data_dir() -> str:
     """Returns an OS-specific, safe directory for application data."""
@@ -122,6 +122,11 @@ DEFAULT_FILTERS = {
     "fem_endings_regex": ".*(ova|eva|ова|ева|а|я|ия|iya|ia|xon|хон|bibi|биби)$",
     "blacklist_keywords": ["logist", "dispatcher", "логист", "диспетчер", "@lorry_filter_bot"],
     "bot_service_keywords": ["Guruhda yozish uchun", "qo'shishingiz kerak", "robot"],
+    "uz_stop_words": ["yuk bor", "mashina kerak", "aka", "fura", "ref", "yuk", "bor", "kerak", "nechi", "tonna", "toshkent", "vodiy", "shaxar", "viloyat"],
+    "target_routes": [],
+    "duplicate_timeout": 600,
+    "whitelist_users": [],
+    "blacklist_users": [],
     "max_line_breaks": 5,
     "max_common_groups": 2,
     "min_uz_char_percentage": 0.3,
@@ -142,12 +147,10 @@ def sanity_check_filters(config):
             config[key] = value
             
     # Validate specific types
-    if not isinstance(config.get("blacklist_keywords"), list):
-        config["blacklist_keywords"] = DEFAULT_FILTERS["blacklist_keywords"]
-    if not isinstance(config.get("bot_service_keywords"), list):
-        config["bot_service_keywords"] = DEFAULT_FILTERS["bot_service_keywords"]
-    if not isinstance(config.get("forward_destinations"), list):
-        config["forward_destinations"] = DEFAULT_FILTERS["forward_destinations"]
+    list_keys = ["blacklist_keywords", "bot_service_keywords", "forward_destinations", "uz_stop_words", "whitelist_users", "blacklist_users"]
+    for key in list_keys:
+        if not isinstance(config.get(key), list):
+            config[key] = DEFAULT_FILTERS[key]
         
     return config
 

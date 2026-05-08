@@ -4,7 +4,7 @@ import threading
 import logging
 from telethon import TelegramClient, events, utils, errors
 from telethon.tl.functions.messages import GetCommonChatsRequest
-from config import API_ID, API_HASH, SESSION_DIR
+import config
 
 class LoadHunterBackend:
     def __init__(self, loop, on_lead_callback, on_groups_callback, on_error_callback, on_filter_log_callback=None, on_ready_callback=None):
@@ -86,9 +86,9 @@ class LoadHunterBackend:
                 logging.error(f"Error during loop closure cleanup: {e}")
 
     async def _init_client(self):
-        session_path = os.path.join(SESSION_DIR, 'loadhunter_session')
+        session_path = os.path.join(config.SESSION_DIR, 'loadhunter_session')
         
-        if not API_ID or not API_HASH:
+        if not config.API_ID or not config.API_HASH:
             logging.error("CRITICAL: API_ID or API_HASH is missing in backend. Cannot connect.")
             self._starting = False
             self.on_error("CREDENTIALS_MISSING")
@@ -96,7 +96,7 @@ class LoadHunterBackend:
 
         # Use a more robust connection policy
         try:
-            self.client = TelegramClient(session_path, int(API_ID), API_HASH, connection_retries=5, retry_delay=3)
+            self.client = TelegramClient(session_path, int(config.API_ID), config.API_HASH, connection_retries=5, retry_delay=3)
         except Exception as e:
             logging.error(f"Failed to initialize TelegramClient: {e}")
             self._starting = False
@@ -142,30 +142,47 @@ class LoadHunterBackend:
                     except Exception:
                         return # Skip if we can't resolve sender
                     
-                    # Check cache first for common groups - only for users
-                    common_count = 0
-                    from telethon.tl.types import User
-                    if isinstance(sender, User):
-                        if sender.id in self.common_chats_cache:
-                            common_count = self.common_chats_cache[sender.id]
-                        else:
-                            try:
-                                # Robustly call GetCommonChatsRequest
-                                common = await self.client(GetCommonChatsRequest(user_id=sender, max_id=0, limit=100))
-                                common_count = len(common.chats)
-                                self.common_chats_cache[sender.id] = common_count
-                            except Exception:
-                                common_count = 0
-                    
-                    reason = self.filter_engine.is_spam(event.text, sender, common_count, media=event.media)
+                    # --- PHASE 1: FAST FILTERS ---
+                    reason = self.filter_engine.is_spam_fast(event.text, sender, media=event.media)
                     
                     first_name = getattr(sender, 'first_name', '') or ''
                     last_name = getattr(sender, 'last_name', '') or ''
                     name = f"{first_name} {last_name}".strip() or "Unknown"
 
+                    if reason == "WHITELISTED":
+                        # Skip all other filters and proceed
+                        reason = None
+                        common_count = "W" # Mark as Whitelisted
+                    elif reason:
+                        # Failed fast filters
+                        if self.on_filter_log:
+                            self.on_filter_log(name, "REJECTED: " + reason)
+                        return
+                    else:
+                        # --- PHASE 2: SOCIAL FILTERS (Expensive) ---
+                        common_count = 0
+                        from telethon.tl.types import User
+                        if isinstance(sender, User):
+                            if sender.id in self.common_chats_cache:
+                                common_count = self.common_chats_cache[sender.id]
+                            else:
+                                try:
+                                    # Robustly call GetCommonChatsRequest
+                                    common = await self.client(GetCommonChatsRequest(user_id=sender, max_id=0, limit=100))
+                                    common_count = len(common.chats)
+                                    self.common_chats_cache[sender.id] = common_count
+                                except Exception:
+                                    common_count = 0
+                        
+                        reason = self.filter_engine.is_spam_social(common_count)
+                        if reason:
+                            if self.on_filter_log:
+                                self.on_filter_log(name, "REJECTED: " + reason)
+                            return
+
+                    # PASSED ALL FILTERS
                     if self.on_filter_log:
-                        status = "REJECTED: " + reason if reason else "PASSED"
-                        self.on_filter_log(name, status)
+                        self.on_filter_log(name, "PASSED")
 
                     if not reason:
                         # Construct robust tg:// link for direct app opening
@@ -181,7 +198,7 @@ class LoadHunterBackend:
                         except Exception:
                             tg_link = f"tg://openmessage?chat_id={event.chat_id}&message_id={event.id}"
                         
-                        self.on_lead(name, common_count, event.text or "[Media/No Text]", tg_link, event.chat_id, event.id)
+                        self.on_lead(name, common_count, event.text or "[Media/No Text]", tg_link, event.chat_id, event.id, sender.id)
                 except Exception as e:
                     logging.error(f"Error in backend handler: {e}", exc_info=True)
 
